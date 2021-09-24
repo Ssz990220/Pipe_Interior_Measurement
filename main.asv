@@ -1,0 +1,19 @@
+%% Clean up
+clc
+clean
+close all
+%% Load robot & env
+kin = loadrobot('universalUR10');
+
+% TEMP Collision
+floor = collisionBox(1, 1, 0.01);
+tabletop1 = collisionBox(0.4,1,0.02);
+tabletop1.Pose = trvec2tform([0.3,0,0.6]);EndEffector
+tabletop2 = collisionBox(0.6,0.2,0.02);
+tabletop2.Pose = trvec2tform([-0.2,0.4,0.5]);
+can = collisionCylinder(0.03,0.16);
+can.Pose = trvec2tform([0.3,0.0,0.7]);
+
+%% State Space 
+ss = UR10_StateSpace(kin);
+ss.EndEffector = '';        
