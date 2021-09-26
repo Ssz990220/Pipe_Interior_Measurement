@@ -16,7 +16,6 @@ can.Pose = trvec2tform([0.3,0.0,0.7]);
 
 %% State Space 
 ss = UR10_StateSpace(kin);
-ss.EndEffector = '';        %% Remain unsolved
 
 %% Fake goal state
 R = [0 0 1; 1 0 0; 0 1 0]; 
