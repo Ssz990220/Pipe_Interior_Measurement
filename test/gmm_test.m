@@ -41,25 +41,25 @@ for m = 1:nSC
     end
 end
 
-allConverge = (sum(converged(:)) == nK*nSigma*nSC)
+allConverge = (sum(converged(:)) == nK*nSigma*nSC);
 
-figure
-bar(reshape(aic,nK,nSigma*nSC))
-title('AIC For Various $k$ and $\Sigma$ Choices','Interpreter','latex')
-xlabel('$k$','Interpreter','Latex')
-ylabel('AIC')
-legend({'Diagonal-shared','Full-shared','Diagonal-unshared',...
-    'Full-unshared'})
+% figure
+% bar(reshape(aic,nK,nSigma*nSC))
+% title('AIC For Various $k$ and $\Sigma$ Choices','Interpreter','latex')
+% xlabel('$k$','Interpreter','Latex')
+% ylabel('AIC')
+% legend({'Diagonal-shared','Full-shared','Diagonal-unshared',...
+%     'Full-unshared'})
+% 
+% figure
+% bar(reshape(bic,nK,nSigma*nSC))
+% title('BIC For Various $k$ and $\Sigma$ Choices','Interpreter','latex')
+% xlabel('$c$','Interpreter','Latex')
+% ylabel('BIC')
+% legend({'Diagonal-shared','Full-shared','Diagonal-unshared',...
+%     'Full-unshared'})
 
-figure
-bar(reshape(bic,nK,nSigma*nSC))
-title('BIC For Various $k$ and $\Sigma$ Choices','Interpreter','latex')
-xlabel('$c$','Interpreter','Latex')
-ylabel('BIC')
-legend({'Diagonal-shared','Full-shared','Diagonal-unshared',...
-    'Full-unshared'})
-
-gmBest = gm{5,2,2};
+gmBest = gm{3,2,2};
 clusterX = cluster(gmBest,X);
 kGMM = gmBest.NumComponents;
 d = 500;
