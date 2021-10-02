@@ -44,15 +44,17 @@ classdef GMM_K_means
             %   N is the maximum number of clusters
             obj.max_iter = options.max_iter;
             obj.bhat_dis_threshold = options.bhat_dis_threshold;
-            obj.start_merge_threshold = start_merge_threshold;
+            obj.start_merge_threshold = options.start_merge_threshold;
             obj.stop_criteria = options.stop_criteria;
-            tic
-            parpool
-            t = toc;
-            fprintf('Took %.2f sec to create a parallel pool\n',t);
+            if options.parallel    % for debug
+                tic
+                parpool
+                t = toc;
+                fprintf('Took %.2f sec to create a parallel pool\n',t);
+            end
             obj.data = X;
-            obj.dim_data = size(X,1);
-            obj.n_data = size(X,2);
+            obj.dim_data = size(X,2);
+            obj.n_data = size(X,1);
             obj.N = N;
             %   Prepare distance matrix to accelerate further calculation
             obj.dis_mat = zeros(obj.n_data,obj.n_data);
@@ -70,24 +72,29 @@ classdef GMM_K_means
             obj.k_means_options = [];       %TODO
             
             % GMM 
-            obj.gmm_options = []; %TODO
+            obj.gmm_options = statset('Display','final'); %TODO
             obj.gmm_CovarianceType = 'full';
-            obj.gmm_SharedCovariance = False;
+            obj.gmm_SharedCovariance = false;
             S.mu = obj.centers{1};
             S.Sigma = eye(obj.dim_data);
             S.ComponentProportion = 1;
-            obj.gmm_models(1) = fitgmmdist(obj.data, 1, 'CovarianceType',...
+            obj.gmm_models{1} = fitgmdist(obj.data, 1, 'CovarianceType',...
                 obj.gmm_CovarianceType,'SharedCovariance',...
-                obj.gmm_SharedCovariance, obj.gmm_options,...
+                obj.gmm_SharedCovariance, 'Options',obj.gmm_options,...
                 'Start',S);
             obj.n_list(1) = 1;
         end
         
         function obj = BUILD_GMM(obj)
             for i = 1:obj.max_iter
-                next_iter();
-                if var(obj.n_list(-obj.stop_criteria:-1))==0
-                    obj.gmm_final = obj.gmm_models(-1);
+                obj.next_iter();
+                if obj.n_iter < obj.stop_criteria
+                    if var(obj.n_list(:))==0
+                        obj.gmm_final = obj.gmm_models{-1};
+                        break
+                    end
+                elseif var(obj.n_list(-obj.stop_criteria:-1))==0
+                    obj.gmm_final = obj.gmm_models{-1};
                 end
             end
         end
@@ -147,19 +154,19 @@ classdef GMM_K_means
         end
         
         function obj = next_iter(obj)
-            new_idx = find_xk_plus_1();
+            new_idx = obj.find_xk_plus_1();
             obj.new_x_init = obj.data(new_idx,:);
             id = obj.n_iter + 1;
             % EM algorithm
             S.mu = [obj.centers{obj.n_iter};obj.new_x_init];
-            S.sigma = cat(3,obj.gmm_models(obj.n_iter).Sigma,eye(obj.dim_data));
-            S.ComponentProportion = [obj.gmm_models(obj.n_iter).ComponentProportion,0];
-            obj.gmm_models(id) = fitgmmdist(obj.data, 1, ...
+            S.Sigma = cat(3,obj.gmm_models{obj.n_iter}.Sigma,eye(obj.dim_data));
+            S.ComponentProportion = [obj.gmm_models{obj.n_iter}.ComponentProportion,1e-8];
+            obj.gmm_models{id} = fitgmdist(obj.data, size(S.mu,1), ...
                 'CovarianceType',obj.gmm_CovarianceType,...
                 'SharedCovariance',obj.gmm_SharedCovariance, ...
-                obj.gmm_options,'Start',S);
+                'Options',obj.gmm_options,'Start',S);
             if obj.n_list(obj.n_iter) >= obj.start_merge_threshold
-                cur_centers = merge_close_clusters(obj);
+                cur_centers = merge_close_clusters(obj,obj.gmm_models{id});
             else
                 cur_centers = obj.centers(obj.n_iter);
             end
@@ -176,14 +183,14 @@ classdef GMM_K_means
             % Only merge the closest one
             dis = bhat_dis(model.mu, model.Sigma);
             [~, min_idx] = min(dis, [], 2);
-            dis_flag = boolen(zeros(size(dis)));
+            dis_flag = boolean(zeros(size(dis)));
             for i = 1:length(min_idx)
                 dis_flag(i,min_idx(i))=true;
             end
             dis_flag = dis_flag & (dis < obj.bhat_dis_threshold);
-            is_merged = boolen(zeros(1,length(min_idx)));
+            is_merged = boolean(zeros(1,length(min_idx)));
             idx = cluster(model, obj.data);
-            counter = 0;
+            counter = 1;
             for i = 1:size(model.mu,2)
                 if is_merged(i)
                     continue
