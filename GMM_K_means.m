@@ -61,12 +61,11 @@ classdef GMM_K_means < handle
             %   Prepare distance matrix to accelerate further calculation
             obj.dis_mat = zeros(obj.n_data,obj.n_data);
             obj.centers = cell(N,1);
+            tic;
             for i = 1:obj.n_data
-                for j = i+1:obj.n_data
-                   obj.dis_mat(i,j)=sum((obj.data(i,:)-obj.data(j,:)).^2);
-                end
+               obj.dis_mat(i,:)=sum((obj.data(i,:)-obj.data).^2,2);         % How to accelerate?
             end
-            
+            toc
             obj.n_list = zeros(1,obj.max_iter);
             obj.n_iter = 1;
             obj.k_idx = zeros(obj.n_data,obj.N);
@@ -102,7 +101,7 @@ classdef GMM_K_means < handle
             end
         end
         
-        function in_collision = check_collision(obj, poses)
+        function in_collision = check_collisions(obj, poses)
             n_pose = size(poses,1);
             in_collision = boolean(zeros(n_pose,1));
             parfor i = 1:n_pose
@@ -121,71 +120,70 @@ classdef GMM_K_means < handle
             %find_k_plus_1_init finds the next initial center for
             %clustering.
             b = zeros(obj.n_data,1);
-            for i = 1:obj.n_data
-                for j = 1:obj.n_data
-                    d_kj = min(sum((obj.centers{obj.n_iter}-...
-                        obj.data(j,:)).^2, 2));
-                    if i < j
-                        b(i) = b(i) + max(d_kj - obj.dis_mat(i,j),0);
-                    else 
-                        b(i) = b(i) + max(d_kj - obj.dis_mat(j,i),0);
-                    end
-                end
+            data_local = obj.data;
+            par_centers = obj.centers{obj.n_iter};
+            data_local = repmat(data_local,1,1,size(par_centers,1));
+            data_local = permute(data_local,[3,2,1]);
+            par_centers = repmat(par_centers,1,1,obj.n_data);
+            dis_mat_local = obj.dis_mat;
+            num_data = obj.n_data;
+            for i = 1:num_data
+                d_kj = min(sum((par_centers - data_local).^2, 2),[],1);
+                d_kj = permute(d_kj,[3,1,2]);
+                b(i) = sum(max([d_kj' - dis_mat_local(i,:);zeros(1,num_data)],[],1));
             end
             [~,x_kp1_idx]= max(b);
         end
         
-        function obj = next_k_means(obj)
-            %
-            % must execute before next_gmm
-            obj.n_cluster = obj.n_cluster + 1;
-            [obj.k_idx(:,obj.n_cluster), obj.centers{obj.n_cluster+1}] =...
-                kmeans(obj.data,[],'Options',obj.k_means_options,'Start',...
-                [obj.centers{obj.n_cluster - 1};obj.new_x_init],'Display','final');
-            new_idx = find_xk_plus_1();
-            obj.new_x_init = obj.data(new_idx,:);
-        end
-        
-        function obj = next_gmm(obj)
-            S.mu = [obj.centers{obj.n_cluster - 1};obj.new_x_init];
-            S.sigma = [obj.gmm_models(obj.n_cluster - 1).Sigma;eye(obj.dim_data)];
-            S.ComponentProportion = [obj.gmm_models(obj.n_cluster-1).ComponentProportion,0];
-            obj.gmm_models(obj.n_cluster) = fitgmmdist(obj.data, 1, ...
-                'CovarianceType',obj.gmm_CovarianceType,...
-                'SharedCovariance',obj.gmm_SharedCovariance, ...
-                obj.gmm_options,'Start',S);
-        end
-        
         function obj = next_iter(obj)
-            new_idx = obj.find_xk_plus_1();
-            obj.new_x_init = obj.data(new_idx,:);
             id = obj.n_iter + 1;
+            tic;
+            new_idx = obj.find_xk_plus_1();
+            t = toc;
+            fprintf('Find new idx took %.6f s in iter %d.\n',[t,id]);
+            obj.new_x_init = obj.data(new_idx,:);
             % EM algorithm
             S.mu = [obj.centers{obj.n_iter};obj.new_x_init];
             S.Sigma = cat(3,obj.gmm_models{obj.n_iter}.Sigma,eye(obj.dim_data));
             S.ComponentProportion = ones(1,length(obj.gmm_models{obj.n_iter}.ComponentProportion)+1)...
                 /(length(obj.gmm_models{obj.n_iter}.ComponentProportion)+1);
+            tic;
             obj.gmm_models{id} = fitgmdist(obj.data, size(S.mu,1), ...
                 'CovarianceType',obj.gmm_CovarianceType,...
                 'SharedCovariance',obj.gmm_SharedCovariance, ...
-                'Options',obj.gmm_options,'Start',S);
+                'Options',obj.gmm_options,'Start',S);             % TODO
+            t = toc;
+            fprintf('EM for GMM took %.6f s in iter %d.\n',[t,id]);
+            tic;
             if obj.n_list(obj.n_iter) >= obj.start_merge_threshold
                 [merge_flag, cur_centers] = merge_close_clusters(obj,obj.gmm_models{id});
                 if merge_flag
                     S.mu = cur_centers;
-                    S.Sigma = obj.gmm_models{obj.n_iter}.Sigma;
-                    S.ComponentProportion = obj.gmm_models{obj.n_iter}.ComponentProportion;
-                    obj.gmm_models{id} = fitgmdist(obj.data, size(S.mu,1), ...
-                    'CovarianceType',obj.gmm_CovarianceType,...
-                    'SharedCovariance',obj.gmm_SharedCovariance, ...
-                    'Options',obj.gmm_options,'Start',S);
+                    if size(cur_centers,1)<obj.n_list(obj.n_iter)
+                        obj.gmm_models{id} = fitgmdist(obj.data, size(S.mu,1), ...
+                                'CovarianceType',obj.gmm_CovarianceType,...
+                                'SharedCovariance',obj.gmm_SharedCovariance, ...
+                                'Options',obj.gmm_options);
+                    else
+                        S.Sigma = obj.gmm_models{obj.n_iter}.Sigma;
+                        S.ComponentProportion = obj.gmm_models{obj.n_iter}.ComponentProportion;
+                        obj.gmm_models{id} = fitgmdist(obj.data, size(S.mu,1), ...
+                        'CovarianceType',obj.gmm_CovarianceType,...
+                        'SharedCovariance',obj.gmm_SharedCovariance, ...
+                        'Options',obj.gmm_options,'Start',S);
+                    end
                 end
             else
                 cur_centers = obj.centers(obj.n_iter);
             end
+            t = toc;
+            fprintf('Merge took %.6f s in iter %d.\n',[t,id]);
+            tic;
             [obj.k_idx(:,id), obj.centers{id}] =...
                 kmeans(obj.data,[],'Options',obj.k_means_options,'Start',...
                 cur_centers,'Display','final');
+            t = toc;
+            fprintf('K-means took %.6f s in iter %d.\n',[t,id]);
             
             % Update obj variables
             obj.n_iter = id;
@@ -238,4 +236,3 @@ classdef GMM_K_means < handle
         end
     end
 end
-
