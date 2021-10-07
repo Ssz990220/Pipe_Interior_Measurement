@@ -42,7 +42,7 @@ hold off
 options.max_iter = 100;
 options.bhat_dis_threshold = 1;
 options.start_merge_threshold = 1;
-options.stop_criteria = 5;
+options.stop_criteria = 3;
 options.parallel = false;
 options.display = true;
 gmm_k_means = GMM_K_means(X,10,options);
