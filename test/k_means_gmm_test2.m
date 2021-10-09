@@ -1,6 +1,6 @@
 clc;
 clear;
-mu = (rand(5,2)-0.5)*10;
+mu = (rand(5,2)-0.5)*20;
 sigma = [1 1]; % shared diagonal covariance matrix
 gm = gmdistribution(mu,sigma);
 X = random(gm, 2000);

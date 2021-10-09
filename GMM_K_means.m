@@ -110,7 +110,11 @@ classdef GMM_K_means < handle
         end
         
         function points = sample(obj, n_sample)
-           points = zeros(n_sample, obj.dim_data);
+            if nargin == 0
+                points = zeros(1, obj.dim_data);                %TODO
+            else
+                points = zeros(n_sample, obj.dim_data);         %TODO
+            end
         end
     end
     
