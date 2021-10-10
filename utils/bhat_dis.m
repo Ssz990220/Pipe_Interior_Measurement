@@ -8,7 +8,7 @@ if nargin==3
         +1/2*log(det((Sigma(:,:,pair(i,1))+Sigma(:,:,pair(i,2)))/2)/sqrt(det(Sigma(:,:,pair(i,1))*Sigma(:,:,pair(i,2)))));
     end
 else
-    n_cluster = length(mu);
+    n_cluster = size(mu,1);
     bhat_dis = ones(n_cluster, n_cluster)*inf;
     counter = 1;
     for i = 1:n_cluster
