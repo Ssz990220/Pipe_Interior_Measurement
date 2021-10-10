@@ -141,7 +141,7 @@ classdef GMM_K_means < handle
             tic;
             new_idx = obj.find_xk_plus_1();
             t = toc;
-            fprintf('Find new idx took %.6f s in iter %d.\n',[t,id]);
+%             fprintf('Find new idx took %.6f s in iter %d.\n',[t,id]);
             obj.new_x_init = obj.data(new_idx,:);
             % EM algorithm
             S.mu = [obj.centers{obj.n_iter};obj.new_x_init];
@@ -160,7 +160,7 @@ classdef GMM_K_means < handle
                 'RegularizationValue',0.001,...
                 'Options',obj.gmm_options);             % TODO
             t = toc;
-            fprintf('EM for GMM took %.6f s in iter %d.\n',[t,id]);
+%             fprintf('EM for GMM took %.6f s in iter %d.\n',[t,id]);
             tic;
             if obj.n_list(obj.n_iter) >= obj.start_merge_threshold
                 [merge_flag, cur_centers] = merge_close_clusters(obj,obj.gmm_models{id});
@@ -185,7 +185,7 @@ classdef GMM_K_means < handle
                 cur_centers =[obj.centers{obj.n_iter};obj.new_x_init];
             end
             t = toc;
-            fprintf('Merge took %.6f s in iter %d.\n',[t,id]);
+%             fprintf('Merge took %.6f s in iter %d.\n',[t,id]);
             tic;
             [obj.k_idx(:,id), obj.centers{id}] =...
                 kmeans(obj.data,[],'Options',obj.k_means_options,'Start',...
@@ -200,7 +200,7 @@ classdef GMM_K_means < handle
         
         function [merge_flag, centers] = merge_close_clusters(obj, model)
             % Only merge the closest one
-            dis = bhat_dis(model.mu, model.Sigma);
+            dis = bhat_dis(model.mu, model.Sigma)
             [~, min_idx] = min(dis, [], 2);
             dis_flag = boolean(zeros(size(dis)));
             for i = 1:length(min_idx)
