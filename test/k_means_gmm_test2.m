@@ -1,6 +1,6 @@
 clc;
 clear;
-mu = (rand(5,2)-0.5)*20;
+mu = (rand(10,2)-0.5)*20;
 sigma = [1 1]; % shared diagonal covariance matrix
 gm = gmdistribution(mu,sigma);
 X = random(gm, 2000);
@@ -40,7 +40,7 @@ ylabel('Petal width (cm)')
 hold off
 %%
 options.max_iter = 100;
-options.bhat_dis_threshold = 1;
+options.bhat_dis_threshold = 0.5;
 options.start_merge_threshold = 1;
 options.stop_criteria = 3;
 options.parallel = false;

@@ -48,24 +48,20 @@ classdef GMM_K_means < handle
             obj.bhat_dis_threshold = options.bhat_dis_threshold;
             obj.start_merge_threshold = options.start_merge_threshold;
             obj.stop_criteria = options.stop_criteria;
-            if options.parallel    % for debug
-                tic
-                parpool
-                t = toc;
-                fprintf('Took %.2f sec to create a parallel pool\n',t);
-            end
             obj.data = X;
             obj.dim_data = size(X,2);
             obj.n_data = size(X,1);
             obj.N = N;
             %   Prepare distance matrix to accelerate further calculation
-            obj.dis_mat = zeros(obj.n_data,obj.n_data);
+            dis_mat = zeros(obj.n_data,obj.n_data);
             obj.centers = cell(N,1);
             tic;
-            for i = 1:obj.n_data
-               obj.dis_mat(i,:)=sum((obj.data(i,:)-obj.data).^2,2);         % How to accelerate?
+            parfor i = 1:obj.n_data
+               dis_mat(i,:)=sum((X(i,:)-X).^2,2);         % How to accelerate?
             end
-            toc
+            obj.dis_mat = dis_mat;
+            t = toc;
+            fprintf("Preparing distance matrix took %.4f sec\n",t);
             obj.n_list = zeros(1,obj.max_iter);
             obj.n_iter = 1;
             obj.k_idx = zeros(obj.n_data,obj.N);
@@ -73,7 +69,7 @@ classdef GMM_K_means < handle
             obj.k_means_options = statset('Display','off');       %TODO
             
             % GMM 
-            obj.gmm_options = statset('Display','off'); %TODO
+            obj.gmm_options = statset('Display','off',"MaxIter",500); %TODO
             obj.gmm_CovarianceType = 'full';
             obj.gmm_SharedCovariance = false;
             S.mu = obj.centers{1};
@@ -96,9 +92,10 @@ classdef GMM_K_means < handle
                     end
                 elseif var(obj.n_list((obj.n_iter-obj.stop_criteria+1):obj.n_iter))==0
                     obj.gmm_final = obj.gmm_models{obj.n_iter};
-                    break
+                    return
                 end
             end
+            obj.gmm_final = obj.gmm_models{obj.n_iter};
         end
         
         function in_collision = check_collisions(obj, poses)
@@ -131,7 +128,7 @@ classdef GMM_K_means < handle
             par_centers = repmat(par_centers,1,1,obj.n_data);
             dis_mat_local = obj.dis_mat;
             num_data = obj.n_data;
-            for i = 1:num_data
+            parfor i = 1:num_data
                 d_kj = min(sum((par_centers - data_local).^2, 2),[],1);
                 d_kj = permute(d_kj,[3,1,2]);
                 b(i) = sum(max([d_kj' - dis_mat_local(i,:);zeros(1,num_data)],[],1));
@@ -152,10 +149,16 @@ classdef GMM_K_means < handle
             S.ComponentProportion = ones(1,length(obj.gmm_models{obj.n_iter}.ComponentProportion)+1)...
                 /(length(obj.gmm_models{obj.n_iter}.ComponentProportion)+1);
             tic;
+%             obj.gmm_models{id} = fitgmdist(obj.data, size(S.mu,1), ...
+%                 'CovarianceType',obj.gmm_CovarianceType,...
+%                 'SharedCovariance',obj.gmm_SharedCovariance, ...
+%                 'RegularizationValue',0.001,...
+%                 'Options',obj.gmm_options,'Start',S);             % TODO
             obj.gmm_models{id} = fitgmdist(obj.data, size(S.mu,1), ...
                 'CovarianceType',obj.gmm_CovarianceType,...
                 'SharedCovariance',obj.gmm_SharedCovariance, ...
-                'Options',obj.gmm_options,'Start',S);             % TODO
+                'RegularizationValue',0.001,...
+                'Options',obj.gmm_options);             % TODO
             t = toc;
             fprintf('EM for GMM took %.6f s in iter %d.\n',[t,id]);
             tic;
@@ -174,11 +177,12 @@ classdef GMM_K_means < handle
                         obj.gmm_models{id} = fitgmdist(obj.data, size(S.mu,1), ...
                         'CovarianceType',obj.gmm_CovarianceType,...
                         'SharedCovariance',obj.gmm_SharedCovariance, ...
-                        'Options',obj.gmm_options,'Start',S);
+                        'RegularizationValue',0.001,...
+                        'Options',obj.gmm_options);%,'Start',S);
                     end
                 end
             else
-                cur_centers = obj.centers(obj.n_iter);
+                cur_centers =[obj.centers{obj.n_iter};obj.new_x_init];
             end
             t = toc;
             fprintf('Merge took %.6f s in iter %d.\n',[t,id]);
