@@ -22,10 +22,7 @@ classdef UR10StateSpaceGMM < nav.StateSpace & ...
         end
         
         function copyObj = copy(obj)
-            copyObj = feval(class(obj));
-            copyObj.StateBounds = obj.StateBounds;
-            copyObj.UniformDistribution = obj.UniformDistribution.copy;
-            copyObj.NormalDistribution = obj.NormalDistribution.copy;
+            printf("Copy Object");
         end
         
         function boundedState = enforceStateBounds(obj, state)
@@ -57,7 +54,8 @@ classdef UR10StateSpaceGMM < nav.StateSpace & ...
         end
         
         function state = sampleGMM(obj, GMM_model)
-            state = GMM_model.sample();
+            state = random(GMM_model,1);
+            state = cvt_n_space(state);
             state = obj.enforceStateBounds(state);
         end
         
@@ -69,15 +67,38 @@ classdef UR10StateSpaceGMM < nav.StateSpace & ...
             interpState = state1 + fraction' * stateDiff;
         end
         
+        function states = sample_around_traj(obj,state1,state2,var,n_sample)
+           dim = size(state1,2);
+           interp_states = obj.interpolate(state1, state2, [0:(1/8):1 1]);
+           states = [];
+           for i = 1:size(interp_states,1)
+               states = [states; obj.sampleGaussian(interp_states(i,:),ones(1,dim)*var,n_sample/10)];
+           end
+        end
+        
         function dist = distance(obj, state1, state2)
             
             narginchk(3,3);
-            
-            nav.internal.validation.validateStateMatrix(state1, nan, obj.NumStateVariables, "distance", "state1");
-            nav.internal.validation.validateStateMatrix(state2, size(state1,1), obj.NumStateVariables, "distance", "state2");
+            s1 = size(state1,1);
+            s2 = size(state2,1);
+            if s1 == s2
+                nav.internal.validation.validateStateMatrix(state1, nan, obj.NumStateVariables, "distance", "state1");
+                nav.internal.validation.validateStateMatrix(state2, size(state1,1), obj.NumStateVariables, "distance", "state2");
 
-            stateDiff = bsxfun(@minus, state2, state1);
-            dist = sqrt( sum( stateDiff.^2, 2 ) );
+                stateDiff = state2 - state1;
+                dist = sqrt( sum( stateDiff.^2, 2 ) );
+            else
+                if s1 == 1
+                    stateDiff = repmat(state1,size(state2,1),1)-state2;
+                    dist = sqrt( sum( stateDiff.^2, 2 ) );
+                elseif s2 == 1
+                    stateDiff = repmat(state2,size(state1,1),1)-state1;
+                    dist = sqrt( sum( stateDiff.^2, 2 ) );
+                else
+                    nav.internal.validation.validateStateMatrix(state1, nan, obj.NumStateVariables, "distance", "state1");
+                    nav.internal.validation.validateStateMatrix(state2, size(state1,1), obj.NumStateVariables, "distance", "state2");
+                end
+            end
         end
         
         
