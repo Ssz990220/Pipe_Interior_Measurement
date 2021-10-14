@@ -15,22 +15,31 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
         ValidationDistance
         col_threshold
         col_free_threshold
+        ambigous_states_pool               % Restore ambigous states
+        ambigous_states_flag_pool
+        ax
+        visual
+        false_col_free_pose         % Restore false collision free states in final double check
     end
     
     methods
-        function obj = UR10StateValidatorGMM(StateSpace, robot, collision_obj, col_threshold, col_free_threshold)
+        function obj = UR10StateValidatorGMM(StateSpace, robot, collision_obj, col_threshold, col_free_threshold, ax)
             %UR10STATEVALIDATORGMM Construct an instance of this class
             %   Detailed explanation goes here
             obj@nav.StateValidator(StateSpace);
             obj.robot = robot;
             obj.collision_obj = collision_obj;
             obj.num_kin_check = 0;
-            obj.ValidationDistance = 0.01;
+            obj.ValidationDistance = 0.01;                          %
             obj.col_free_threshold = col_free_threshold;
             obj.col_threshold = col_threshold;
+            if nargin == 6
+                obj.ax = ax;
+                obj.visual = true;
+            end
         end
         
-        function inCollision = isStateValid(obj, state, count)
+        function isValid = isStateValid(obj, state, count)
             if nargin == 2
                 count = true;
             end
@@ -53,32 +62,43 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
                     end
                 end
             else
-                [inCollision,~,~]=checkCollision(robot, state, collision_obj,"IgnoreSelfCollision","on","Exhaustive","on");
+                [inCollision,sepDist,~]=checkCollision(robot, state, collision_obj,"IgnoreSelfCollision","on","Exhaustive","on");
+                if obj.visual & inCollision
+                    [bodyIdx,worldCollisionObjIdx] = find(isnan(sepDist)); % Find collision pairs
+                    HighlightCollisionBodies(robot,bodyIdx,obj.ax);
+                end
                 if count
                         num_kin_check = num_kin_check + 1;
                 end
             end
             obj.num_kin_check = num_kin_check;
+            isValid = ~inCollision;
         end
         
-        function inCollision = isStateValid_GMM(obj, state, GMM_col_model, GMM_free_model)
+        function isValid = isStateValid_GMM(obj, state, GMM_col_model, GMM_free_model)
             state_2n = cvt_2n_space(state);
-            dis_col = min(mahal(GMM_col_model,state_2n));
-            dis_free = min(mahal(GMM_free_model,state_2n));
+            dis_col = min(mahal(GMM_col_model,state_2n),[],2);
+            dis_free = min(mahal(GMM_free_model,state_2n),[],2);
             hybrid_dis = dis_col - dis_free;
-            if hybrid_dis < obj.col_threshold
-                inCollision = true;
-                return
-            elseif hybrid_dis > obj.col_free_threshold
-                inCollision = false;
-                return
-            else
-                inCollision = obj.isStateValid(state);
-                return
+            isValid = false(size(state,1),1);
+            for i = 1:size(state,1)
+                if hybrid_dis(i) < obj.col_threshold
+                    isValid(i) = false;
+                elseif hybrid_dis(i) > obj.col_free_threshold
+                    isValid(i) = true;
+                else
+                    isValid(i) = obj.isStateValid(state(i,:));
+                    obj.add_ambigous_pose(state(i,:), isValid(i));
+                end
             end
+            
         end
-
-        function [isValid, lastValidState] = isMotionValid(obj, state1, state2)
+        
+        function [isValid, lastValidState] = isMotionValid(obj, state1, state2, final_check)
+            if nargin == 3
+                final_check = false;
+            end
+            
             dist = obj.StateSpace.distance(state1, state2);
             interval = obj.ValidationDistance/dist;
             interpStates = obj.StateSpace.interpolate(state1, state2, [0:interval:1 1]);
@@ -88,7 +108,28 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
                
                 interpSt = interpStates(i,:);
                 
-                if ~obj.isStateValid_GMM(interpSt)
+                if ~obj.isStateValid(interpSt)
+                    isValid = false; 
+                    if final_check
+                        obj.add_false_col_free_pose(interpSt);
+                    end
+                    break;
+                end
+            end
+            lastValidState = inf;
+        end
+        
+        function [isValid, lastValidState] = isMotionValid_GMM(obj, state1, state2, GMM_col_model, GMM_free_model)
+            dist = obj.StateSpace.distance(state1, state2);
+            interval = obj.ValidationDistance/dist;
+            interpStates = obj.StateSpace.interpolate(state1, state2, [0:interval:1 1]);
+            
+            isValid = true;
+            for i = 1: size(interpStates,1)
+               
+                interpSt = interpStates(i,:);
+                
+                if ~obj.isStateValid_GMM(interpSt, GMM_col_model, GMM_free_model)
                     isValid = false; 
                     break;
                 end
@@ -96,8 +137,35 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
             lastValidState = inf;
         end
         
+        function isValid = isTrajValid(obj,states)
+           traj_len = size(states,1);
+           isValid_sec = false(traj_len-1,1);
+           for i = 1:traj_len-1
+               isValid_sec(i) = obj.isMotionValid(states(i,:),states(i+1,:),true);          % final check
+           end
+           isValid = ~any(~isValid_sec);
+        end
+        
         function copyObj = copy(obj)
     
+        end
+        
+        function obj = add_ambigous_pose(obj, state, flag)
+           obj.ambigous_states_pool = [obj.ambigous_states_pool;state];
+           obj.ambigous_states_flag_pool = [obj.ambigous_states_flag_pool, flag];
+        end
+        
+        function obj = clean_ambigous_pose_pool(obj)
+           obj.ambigous_states_pool = [];
+           obj.ambigous_states_flag_pool = [];
+        end
+        
+        function obj = add_false_col_free_pose(obj, state)
+           obj.false_col_free_pose = [obj.false_col_free_pose; state];
+        end
+        
+        function obj = clean_false_col_free_pose(obj)
+           obj.false_col_free_pose = []; 
         end
     end
 end
