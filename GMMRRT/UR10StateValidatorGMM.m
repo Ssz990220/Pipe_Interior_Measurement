@@ -11,7 +11,6 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
     properties
         robot
         collision_obj
-        num_kin_check
         ValidationDistance
         col_threshold
         col_free_threshold
@@ -20,6 +19,8 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
         ax
         visual
         false_col_free_pose         % Restore false collision free states in final double check
+        gmm_check_counter
+        kin_check_counter
     end
     
     methods
@@ -29,7 +30,8 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
             obj@nav.StateValidator(StateSpace);
             obj.robot = robot;
             obj.collision_obj = collision_obj;
-            obj.num_kin_check = 0;
+            obj.gmm_check_counter = 0;
+            obj.kin_check_counter = 0;
             obj.ValidationDistance = 0.01;                          %
             obj.col_free_threshold = col_free_threshold;
             obj.col_threshold = col_threshold;
@@ -47,7 +49,7 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
 %             worldCollisionPairIdx = cell(size(state,1),1); % Provide the bodies that are in collision
             robot = obj.robot;
             collision_obj = obj.collision_obj;
-            num_kin_check = obj.num_kin_check;
+            num_kin_check = obj.kin_check_counter;
             if size(state,1) > 1
                 parfor i = 1:size(state,1)
                    [inCollision(i),~,~]=checkCollision(robot, state(i,:), collision_obj,"IgnoreSelfCollision","on","Exhaustive","on");
@@ -71,7 +73,7 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
                         num_kin_check = num_kin_check + 1;
                 end
             end
-            obj.num_kin_check = num_kin_check;
+            obj.kin_check_counter = num_kin_check;
             isValid = ~inCollision;
         end
         
@@ -80,18 +82,30 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
             dis_col = min(mahal(GMM_col_model,state_2n),[],2);
             dis_free = min(mahal(GMM_free_model,state_2n),[],2);
             hybrid_dis = dis_col - dis_free;
-            isValid = false(size(state,1),1);
-            for i = 1:size(state,1)
-                if hybrid_dis(i) < obj.col_threshold
-                    isValid(i) = false;
-                elseif hybrid_dis(i) > obj.col_free_threshold
-                    isValid(i) = true;
-                else
-                    isValid(i) = obj.isStateValid(state(i,:));
-                    obj.add_ambigous_pose(state(i,:), isValid(i));
+            if size(state,1)>1
+                isValid = false(size(state,1),1);
+                for i = 1:size(state,1)
+                    if hybrid_dis(i) < obj.col_threshold
+                        isValid(i) = false;
+                    elseif hybrid_dis(i) > obj.col_free_threshold
+                        isValid(i) = true;
+                    else
+                        isValid(i) = obj.isStateValid(state(i,:));
+                        obj.add_ambigous_pose(state(i,:), isValid(i));
+                    end
+                    obj.gmm_check_counter = obj.gmm_check_counter + 1;
                 end
+            else
+                if hybrid_dis < obj.col_threshold
+                    isValid = false;
+                elseif hybrid_dis> obj.col_free_threshold
+                    isValid = true;
+                else
+                    isValid = obj.isStateValid(state);
+                    obj.add_ambigous_pose(state, isValid);
+                end
+                obj.gmm_check_counter = obj.gmm_check_counter + 1;
             end
-            
         end
         
         function [isValid, lastValidState] = isMotionValid(obj, state1, state2, final_check)
@@ -166,6 +180,11 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
         
         function obj = clean_false_col_free_pose(obj)
            obj.false_col_free_pose = []; 
+        end
+        
+        function obj = clean_counter(obj)
+            obj.kin_check_counter = 0;
+            obj.gmm_check_counter = 0;
         end
     end
 end

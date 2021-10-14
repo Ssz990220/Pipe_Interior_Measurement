@@ -21,8 +21,8 @@ classdef plannerGMMRRT < plannerRRT & handle
         col_false_positive_prob         % Has to be small to avoid collision
         col_true_negative_prob          % Has to be high
         init_samples                    
-        init_samples_col_flags
-        trajectory_based_sample         % Sample type while init
+        init_samples_valid_flags
+        add_trajectory_based_sample         % Sample type while init
         fixed_gmm                       % If or not use gmm with fixed number of components
         fixed_gmm_options
         
@@ -42,19 +42,19 @@ classdef plannerGMMRRT < plannerRRT & handle
             obj.display_init_result = options.display_init_result;
             obj.col_false_positive_prob = options.col_false_positive_prob;
             obj.col_true_negative_prob = options.col_true_negative_prob;
-            obj.trajectory_based_sample = options.trajectory_based_sample;
+            obj.add_trajectory_based_sample = options.add_trajectory_based_sample;
             obj.fixed_gmm = options.fixed_gmm;
             if obj.fixed_gmm
                 obj.fixed_gmm_options = options.fixed_gmm_options;
             end
             
-            if obj.trajectory_based_sample
-                obj.init_samples = obj.StateSpace.sample_around_traj(options.start, options.target, options.var, obj.num_init_sampler);
+            if obj.add_trajectory_based_sample
+                obj.init_samples = [obj.StateSpace.sample_around_traj(options.start, options.target, options.var, options.num_init_sampler_traj);obj.StateSpace.sampleUniform(obj.num_init_sampler)];
             else
                 obj.init_samples = obj.StateSpace.sampleUniform(obj.num_init_sampler);
             end
-            obj.init_samples_col_flags = obj.StateValidator.isStateValid(obj.init_samples);
-            obj.StateValidator.num_kin_check=0;
+            obj.init_samples_valid_flags = obj.StateValidator.isStateValid(obj.init_samples);
+            obj.StateValidator.kin_check_counter=0;
         end
         
         function [pathObj, solnInfo] = plan(obj, startState, goalState)
@@ -199,13 +199,15 @@ classdef plannerGMMRRT < plannerRRT & handle
             solnInfo.NumNodes = numNodes;
             solnInfo.NumIterations = numIterations;
             solnInfo.TreeData = treeData';
+            solnInfo.Total_col_check = obj.StateValidator.gmm_check_counter;
+            solnInfo.Kin_check = obj.StateValidator.kin_check_counter;
             
 
         end
         function obj = init(obj)
             obj.is_init = true;
             init_samples = obj.init_samples;
-            init_samples_col_flags = obj.init_samples_col_flags;
+            init_samples_col_flags = ~obj.init_samples_valid_flags;
             if obj.fixed_gmm
                 obj.gmm_col_model_final = fitgmdist(cvt_2n_space(init_samples(init_samples_col_flags,:)),obj.fixed_gmm_options.num_component);
                 obj.gmm_free_model_final = fitgmdist(cvt_2n_space(init_samples(~init_samples_col_flags,:)),obj.fixed_gmm_options.num_component);
@@ -217,16 +219,20 @@ classdef plannerGMMRRT < plannerRRT & handle
                 obj.gmm_free_model.BUILD_GMM();
                 obj.gmm_free_model_final = obj.generate_final_gmm(obj.gmm_free_model.gmm_final);
             end
+            col_dis = hybrid_dis(init_samples(init_samples_col_flags,:),obj.gmm_col_model_final, obj.gmm_free_model_final);
+            free_dis = hybrid_dis(init_samples(~init_samples_col_flags,:),obj.gmm_col_model_final, obj.gmm_free_model_final);
+            
+            % Find Threshold
+            col_dist = fitdist(col_dis','Normal');
+            free_dist = fitdist(free_dis','Normal');
+%             free_threshold = norminv(1-obj.col_false_positive_prob,col_dist.mu, col_dist.sigma);
+%             col_threshold = norminv(obj.col_true_negative_prob,col_dist.mu,col_dist.sigma);
+            sorted_col_dis = sort(col_dis);
+            free_threshold = sorted_col_dis(round(size(col_dis,2)*(1-obj.col_false_positive_prob)));
+            col_threshold = sorted_col_dis(round(size(col_dis,2)*obj.col_true_negative_prob));
+            
+            % Display result
             if obj.display_init_result
-                col_dis = hybrid_dis(init_samples(init_samples_col_flags,:),obj.gmm_col_model_final, obj.gmm_free_model_final);
-                free_dis = hybrid_dis(init_samples(~init_samples_col_flags,:),obj.gmm_col_model_final, obj.gmm_free_model_final);
-                % Fit Distribution
-                col_dist = fitdist(col_dis','Normal');
-                free_dist = fitdist(free_dis','Normal');
-                % Threshold
-                free_threshold = norminv(1-obj.col_false_positive_prob,col_dist.mu, col_dist.sigma);
-                col_threshold = norminv(obj.col_true_negative_prob,col_dist.mu,col_dist.sigma);
-                % 
 %                 true_positive_prob = normcdf(free_threshold, free_dist.mu, free_dist.sigma,'upper');
 %                 false_positive_prob = obj.col_false_positive_prob;
 %                 true_negative_prob = obj.col_true_negative_prob;
