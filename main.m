@@ -2,30 +2,58 @@
 clc
 clear
 close all
-%% parpool create
+%% create parpool 
 if isempty(gcp('nocreate'))
     parpool
 end
-%% Load robot & env
-robot = importrobot('universalUR10.urdf',"MeshPath",["../asset/ur_description/ur10/collision","../asset/ur_description/ur10/visual"]);
-robot.DataFormat = 'row';
-pipes = pipe_loader('./assets/Pipe/pipe_mat',0.001*eye(4)*trvec2tform([500,500,0])*eul2tform([0,0,pi/2]));
-for i = 1:size(pipes,1)
-    collision_obj{i} = collisionMesh(pipes{i});
-end
-
+%% Load env & Env
+[robot, collision_obj, ax] = setupBoxEnv();
+%% Set up planner
+start = [0.5,-1.25,2,-0.8,0,0];
+target = [-1,-1.25,2,-0.8,1,0];
+% StateSpace and StateValidator
 ss = UR10StateSpaceGMM;
 sv = UR10StateValidatorGMM(ss, robot, collision_obj, -0.35,0.5);
-options.num_init_sampler = 2000;
-options.display_init_result = true;
-gmm_rrt_options.max_iter = 20;
-gmm_rrt_options.bhat_dis_threshold = 5;
-gmm_rrt_options.start_merge_threshold = 3;
-gmm_rrt_options.stop_criteria = 3;
-gmm_rrt_options.parallel = false;
-gmm_rrt_options.display = true;
-options.gmm_rrt_options = gmm_rrt_options;
+%% GMM planner
+options = GMM_RRT_Config(start, target);
+% Setup
 planner = plannerGMMRRT(ss,sv,options);
 planner.init();
+%%
+tester = planner_tester(planner);
+tester.init_tester();
+%%
+tic;
+[pathObj, solnInfo] = planner.plan(start, target)
+toc
+% planner.update_GMM_model();                         % Online Learning
+%% Visualize the result
+q = pathObj.States;
+visualize_traj(robot, q, ax);
+%% GMM Bi RRT Plan
+tic;
+planner = plannerBiRRT(ss,sv);
+%% RRT Plan
+tic;
+ss = UR10StateSpaceGMM;
+sv = UR10StateValidatorGMM(ss, robot, collision_obj, -0.35,0.5);
 
-%% Test GMM model
+planner = plannerRRT(ss,sv);
+planner.GoalReachedFcn = @GMMGoalReachedFunction;
+[pathObj, solnInfo] = planner.plan(start,target);
+toc
+%% Visualize the RRT result
+q = pathObj.States;
+visualize_traj(robot, q, ax);
+%% BiRRT Plan
+tic;
+ss = UR10StateSpaceGMM;
+sv = UR10StateValidatorGMM(ss, robot, collision_obj, -0.35,0.5);
+
+planner = plannerBiRRT(ss,sv);
+[pathObj, solnInfo] = planner.plan(start,target);
+toc
+
+%% Visualize 
+q = pathObj.States;
+visualize_traj(robot, q, ax);
