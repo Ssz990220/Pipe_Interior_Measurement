@@ -1,4 +1,4 @@
-classdef UR10StateValidatorGMM < nav.StateValidator & handle
+classdef UR10StateValidatorGMMBiRRT < nav.StateValidator & handle
     %UR10STATEVALIDATORGMM Summary of this class goes here
     %   Detailed explanation goes here
     properties (Constant, Access=protected)
@@ -21,10 +21,12 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
         false_col_free_pose         % Restore false collision free states in final double check
         gmm_check_counter
         kin_check_counter
+        GMM_col_model
+        GMM_free_model
     end
     
     methods
-        function obj = UR10StateValidatorGMM(StateSpace, robot, collision_obj, ax)
+        function obj = UR10StateValidatorGMMBiRRT(StateSpace, robot, collision_obj, ax)
             %UR10STATEVALIDATORGMM Construct an instance of this class
             %   Detailed explanation goes here
             obj@nav.StateValidator(StateSpace);
@@ -39,7 +41,7 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
             end
         end
         
-        function isValid = isStateValid(obj, state, count)
+        function isValid = isStateValid_kin(obj, state, count)
             if nargin == 2
                 count = true;
             end
@@ -75,7 +77,11 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
             isValid = ~inCollision;
         end
         
-        function isValid = isStateValid_GMM(obj, state, GMM_col_model, GMM_free_model)
+        function isValid = isStateValid(obj, state, GMM_col_model, GMM_free_model)
+            if nargin == 2
+                GMM_col_model = obj.GMM_col_model;
+                GMM_free_model = obj.GMM_free_model;
+            end
             state_2n = cvt_2n_space(state);
             dis_col = min(mahal(GMM_col_model,state_2n),[],2);
             dis_free = min(mahal(GMM_free_model,state_2n),[],2);
@@ -88,7 +94,7 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
                     elseif hybrid_dis(i) > obj.col_free_threshold
                         isValid(i) = true;
                     else
-                        isValid(i) = obj.isStateValid(state(i,:));
+                        isValid(i) = obj.isStateValid_kin(state(i,:));
                         obj.add_ambigous_pose(state(i,:), isValid(i));
                     end
                     obj.gmm_check_counter = obj.gmm_check_counter + 1;
@@ -99,14 +105,14 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
                 elseif hybrid_dis> obj.col_free_threshold
                     isValid = true;
                 else
-                    isValid = obj.isStateValid(state);
+                    isValid = obj.isStateValid_kin(state);
                     obj.add_ambigous_pose(state, isValid);
                 end
                 obj.gmm_check_counter = obj.gmm_check_counter + 1;
             end
         end
         
-        function [isValid, lastValidState] = isMotionValid(obj, state1, state2, final_check)
+        function [isValid, lastValidState] = isMotionValid_kin(obj, state1, state2, final_check)
             if nargin == 3
                 final_check = false;
             end
@@ -120,7 +126,7 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
                
                 interpSt = interpStates(i,:);
                 
-                if ~obj.isStateValid(interpSt)
+                if ~obj.isStateValid_kin(interpSt)
                     isValid = false; 
                     if final_check
                         obj.add_false_col_free_pose(interpSt);
@@ -131,7 +137,7 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
             lastValidState = inf;
         end
         
-        function [isValid, lastValidState] = isMotionValid_GMM(obj, state1, state2, GMM_col_model, GMM_free_model)
+        function [isValid, lastValidState] = isMotionValid(obj, state1, state2, GMM_col_model, GMM_free_model)
             dist = obj.StateSpace.distance(state1, state2);
             interval = obj.ValidationDistance/dist;
             interpStates = obj.StateSpace.interpolate(state1, state2, [0:interval:1 1]);
@@ -141,7 +147,7 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
                
                 interpSt = interpStates(i,:);
                 
-                if ~obj.isStateValid_GMM(interpSt, GMM_col_model, GMM_free_model)
+                if ~obj.isStateValid(interpSt, GMM_col_model, GMM_free_model)
                     isValid = false; 
                     break;
                 end
@@ -153,7 +159,7 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
            traj_len = size(states,1);
            isValid_sec = false(traj_len-1,1);
            for i = 1:traj_len-1
-               isValid_sec(i) = obj.isMotionValid(states(i,:),states(i+1,:),true);          % final check
+               isValid_sec(i) = obj.isMotionValid_kin(states(i,:),states(i+1,:),true);          % final check
            end
            isValid = ~any(~isValid_sec);
         end
