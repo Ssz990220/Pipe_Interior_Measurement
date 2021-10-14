@@ -20,8 +20,8 @@ options = GMM_RRT_Config(start, target);
 planner = plannerGMMRRT(ss,sv,options);
 planner.init();
 %%
-tester = planner_tester(planner);
-tester.init_tester();
+% tester = planner_tester(planner);
+% tester.init_tester();
 %%
 tic;
 [pathObj, solnInfo] = planner.plan(start, target)
@@ -32,6 +32,7 @@ q = pathObj.States;
 visualize_traj(robot, q, ax);
 %% GMM Bi RRT Plan
 tic;
+sv.clean_counter();
 planner = plannerBiRRT(ss,sv);
 %% RRT Plan
 tic;
