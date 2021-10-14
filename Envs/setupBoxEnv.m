@@ -1,4 +1,4 @@
-function [robot, collision_obj, ax] = setupBoxEnv()
+function [robot, collision_obj, ax, start, target] = setupBoxEnv()
 %SETUPBOXENV Setup robot environment with a boxy obstacle
 
 % Obstacles
@@ -25,5 +25,8 @@ show(box,"parent",ax);
 %% Load robot
 robot = importrobot('universalUR10.urdf',"MeshPath",["../asset/ur_description/ur10/collision","../asset/ur_description/ur10/visual"]);
 robot.DataFormat = 'row';
+
+start = [0.5,-1.25,2,-0.8,0,0];
+target = [-1,-1.25,2,-0.8,1,0];
 end
 
