@@ -124,8 +124,9 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
                     isValid = false; 
                     if final_check
                         obj.add_false_col_free_pose(interpSt);
+                    else
+                        break;
                     end
-                    break;
                 end
             end
             lastValidState = inf;
@@ -155,7 +156,7 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
            for i = 1:traj_len-1
                isValid_sec(i) = obj.isMotionValid(states(i,:),states(i+1,:),true);          % final check
            end
-           isValid = ~any(~isValid_sec);
+           isValid = all(isValid_sec);
         end
         
         function copyObj = copy(obj)
