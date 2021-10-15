@@ -67,12 +67,19 @@ classdef UR10StateSpaceGMM < nav.StateSpace & ...
             interpState = state1 + fraction' * stateDiff;
         end
         
-        function states = sample_around_traj(obj,state1,state2,var,n_sample)
+        function states = sample_around_traj(obj,state1,state2,var,n_sample_per_state)
            dim = size(state1,2);
            interp_states = obj.interpolate(state1, state2, [0:(1/8):1 1]);
            states = [];
            for i = 1:size(interp_states,1)
-               states = [states; obj.sampleGaussian(interp_states(i,:),ones(1,dim)*var,n_sample/10)];
+               states = [states; obj.sampleGaussian(interp_states(i,:),ones(1,dim)*var,n_sample_per_state];
+           end
+        end
+        
+        function new_samples = sample_around_states(obj, states, var, n_sample_per_state)
+            new_samples = zeros(n_sample_per_state,size(state,2),size(state,1));
+            for i = 1:size(states,1)
+                new_samples = obj.sampleGaussian(states(i,:),ones(size(state,2),1)*var,n_sample_per_state);
            end
         end
         
