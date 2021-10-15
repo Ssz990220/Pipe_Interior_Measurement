@@ -25,7 +25,13 @@ classdef plannerGMMRRT < plannerRRT & handle
         add_trajectory_based_sample         % Sample type while init
         fixed_gmm                       % If or not use gmm with fixed number of components
         fixed_gmm_options
-        
+        col_samples
+        free_samples
+        col_samples_gm_idx
+        free_samples_gm_idx
+        % Post planning update
+        incorrect_sample_var
+        n_sample_per_incorrect_state
     end
     
     methods
@@ -49,14 +55,17 @@ classdef plannerGMMRRT < plannerRRT & handle
             end
             
             if obj.add_trajectory_based_sample
-                obj.init_samples = [obj.StateSpace.sample_around_traj(options.start, options.target, options.var, options.num_init_sampler_traj);obj.StateSpace.sampleUniform(obj.num_init_sampler)];
+                obj.init_samples = [obj.StateSpace.sample_around_traj(options.start,...
+                    options.target, options.var, options.num_init_sampler_traj_per_state...
+                    );obj.StateSpace.sampleUniform(obj.num_init_sampler)];
             else
                 obj.init_samples = obj.StateSpace.sampleUniform(obj.num_init_sampler);
             end
             obj.init_samples_valid_flags = obj.StateValidator.isStateValid(obj.init_samples);
+            obj.col_samples = obj.init_samples(~obj.init_samples_valid_flags,:);
+            obj.free_samples = obj.init_samples(obj.init_samples_valid_flags,:);
             obj.StateValidator.kin_check_counter=0;
         end
-        
         function [pathObj, solnInfo] = plan(obj, startState, goalState)
             if coder.target('MATLAB')
                 cleaner = onCleanup(@()obj.cleanUp);
@@ -206,25 +215,22 @@ classdef plannerGMMRRT < plannerRRT & handle
         end
         function obj = init(obj)
             obj.is_init = true;
-            init_samples = obj.init_samples;
-            init_samples_col_flags = ~obj.init_samples_valid_flags;
             if obj.fixed_gmm
-                obj.gmm_col_model_final = fitgmdist(cvt_2n_space(init_samples(init_samples_col_flags,:)),obj.fixed_gmm_options.num_component);
-                obj.gmm_free_model_final = fitgmdist(cvt_2n_space(init_samples(~init_samples_col_flags,:)),obj.fixed_gmm_options.num_component);
+                obj.gmm_col_model_final = fitgmdist(cvt_2n_space(obj.col_samples),obj.fixed_gmm_options.num_component);
+                obj.gmm_free_model_final = fitgmdist(cvt_2n_space(obj.free_samples),obj.fixed_gmm_options.num_component);
             else
-                obj.gmm_col_model = GMM_K_means(cvt_2n_space(init_samples(init_samples_col_flags,:)),10,obj.gmm_rrt_col_options);
+                obj.gmm_col_model = GMM_K_means(cvt_2n_space(obj.col_samples),10,obj.gmm_rrt_col_options);
                 obj.gmm_col_model.BUILD_GMM();
                 obj.gmm_col_model_final = obj.generate_final_gmm(obj.gmm_col_model.gmm_final);
-                obj.gmm_free_model = GMM_K_means(cvt_2n_space(init_samples(~init_samples_col_flags,:)),10,obj.gmm_rrt_free_options);
+                obj.gmm_free_model = GMM_K_means(cvt_2n_space(obj.free_samples),10,obj.gmm_rrt_free_options);
                 obj.gmm_free_model.BUILD_GMM();
                 obj.gmm_free_model_final = obj.generate_final_gmm(obj.gmm_free_model.gmm_final);
             end
-            col_dis = hybrid_dis(init_samples(init_samples_col_flags,:),obj.gmm_col_model_final, obj.gmm_free_model_final);
-            free_dis = hybrid_dis(init_samples(~init_samples_col_flags,:),obj.gmm_col_model_final, obj.gmm_free_model_final);
+            col_dis = hybrid_dis(obj.col_samples,obj.gmm_col_model_final, obj.gmm_free_model_final);
+            % Free distance is not needed
+%             free_dis = hybrid_dis(obj.free_samples,obj.gmm_col_model_final, obj.gmm_free_model_final);
             
             % Find Threshold
-            col_dist = fitdist(col_dis','Normal');
-            free_dist = fitdist(free_dis','Normal');
 %             free_threshold = norminv(1-obj.col_false_positive_prob,col_dist.mu, col_dist.sigma);
 %             col_threshold = norminv(obj.col_true_negative_prob,col_dist.mu,col_dist.sigma);
             sorted_col_dis = sort(col_dis);
@@ -261,6 +267,8 @@ classdef plannerGMMRRT < plannerRRT & handle
 %                 Range_min = min(min(col_dis), min(free_dis)) * 1.5;
 %                 Range_max = max(max(col_dis),max(free_dis))*1.5;
                 x = -50:0.1:50;
+                col_dist = fitdist(col_dis','Normal');
+                free_dist = fitdist(free_dis','Normal');
                 plot(x,normpdf(x,free_dist.mu, free_dist.sigma),'Color','r');
                 plot(x,normpdf(x,col_dist.mu, col_dist.sigma),'Color','b');
                 % Threshold Plot
@@ -269,12 +277,14 @@ classdef plannerGMMRRT < plannerRRT & handle
                 legend('Collision','Collision Free','Collision Free Distribution','Collision Distribution','Collision Threshold','Collision Free Threshold');
                 hold off
             end
-            
+            obj.col_samples_gm_idx = cluster(obj.gmm_col_model,obj.col_samples);
+            obj.free_samples_gm_idx = cluster(obj.gmm_free_model, obj.free_samples);
             obj.StateValidator.col_threshold = col_threshold;
             obj.StateValidator.col_free_threshold = free_threshold;
         end
         function obj = update_GMM_model(obj)
-            obj.update_with_ambigous_points(obj);
+            obj.update_with_ambigous_states(obj);
+            obj.update_with_incorrect_states(obj);
         end
     end
     methods (Access = {?nav.algs.internal.InternalAccess})
@@ -312,12 +322,63 @@ classdef plannerGMMRRT < plannerRRT & handle
             
        end 
         
-       function obj = update_with_ambigous_points(obj)
+       function obj = update_with_ambigous_states(obj)
            ambigous_states = obj.StateValidator.ambigous_states_pool;
            ambigous_states_flag = obj.StateValidator.ambigous_states_flag_pool;
-           % TODO
+           % Update collision model
+           col_states = ambigous_states(~ambigous_states_flag,:);
+           [obj.gmm_col_model_final, obj.col_samples, obj.col_samples_gm_idx]=...
+               update_gm_with_new_samples(col_states, obj.gmm_col_model_final, ...
+               obj.col_samples, obj.col_samples_gm_idx);
+           % Update free model
+           free_states = ambigous_states(ambigous_states_flag,:);
+           [obj.gmm_free_model_final, obj.free_samples, obj.free_samples_gm_idx]=...
+               update_gm_with_new_samples(free_states,obj.gmm_free_model_final,...
+               obj.free_samples, obj.free_samples_gm_idx);
+           % Clean up
+           obj.StateValidator.clean_ambigous_pose_pool(); 
+           % Update Threshold
+            col_dis = hybrid_dis(obj.col_samples,obj.gmm_col_model_final, obj.gmm_free_model_final);
+            sorted_col_dis = sort(col_dis);
+            free_threshold = sorted_col_dis(round(size(col_dis,2)*(1-obj.col_false_positive_prob)));
+            col_threshold = sorted_col_dis(round(size(col_dis,2)*obj.col_true_negative_prob));
+            obj.StateValidator.col_threshold = col_threshold;
+            obj.StateValidator.col_free_threshold = free_threshold;
        end
        
+       function obj = update_with_incorrect_states(obj)
+           incorrect_states = obj.StateValidator.false_col_free_pose;
+           num_incorrect_states = size(incorrect_states,1);
+           new_samples = obj.StateSpace.sample_around_states(incorrect_states,...
+               obj.incorrect_sample_var, obj.n_sample_per_incorrect_state);
+           new_col_samples = [];
+           for i = 1:num_incorrect_states
+               is_valid=obj.StateValidator.isStateValid(new_samples(:,:,i));
+               % Update the col model only, since valid states are so close
+               % to collision. Current guess is most of the examplers with
+               % be in collision
+               size(new_samples(is_valid(:,i),:,:,i),1)/100
+               new_col_samples = [new_col_samples;new_samples(is_valid,:,i)];
+           end
+           local_options = obj.gmm_rrt_col_options;
+           local_options.max_iter = size(incorrect_states,1);
+           local_options.start_merge_threshold = 1;
+           gmm_col_new_model = GMM_K_means(cvt_2n_space(new_col_samples),size(incorrect_states,1),local_options);
+           gmm_col_new_model.BUILD_GMM();
+           gmm_col_new_model_final = obj.generate_final_gmm(gmm_col_new_model.gmm_final);
+           new_samples_idx = cluster(gmm_col_new_model_final, new_col_samples);
+            [obj.gmm_col_model_final, obj.col_samples, obj.col_samples_gm_idx]=...
+               merge_with_new_dist(obj.gmm_col_model_final, gmm_col_new_model_final, obj.col_samples, ...
+               obj.col_samples_gm_idx,new_col_samples, new_samples_idx, obj.gmm_rrt_col_options);
+           
+           % Update Threshold
+            col_dis = hybrid_dis(obj.col_samples,obj.gmm_col_model_final, obj.gmm_free_model_final);
+            sorted_col_dis = sort(col_dis);
+            free_threshold = sorted_col_dis(round(size(col_dis,2)*(1-obj.col_false_positive_prob)));
+            col_threshold = sorted_col_dis(round(size(col_dis,2)*obj.col_true_negative_prob));
+            obj.StateValidator.col_threshold = col_threshold;
+            obj.StateValidator.col_free_threshold = free_threshold;
+       end
        function gm = generate_final_gmm(obj, gm_final)
           mu = gm_final.mu;
           sigma = gm_final.Sigma;
@@ -325,5 +386,6 @@ classdef plannerGMMRRT < plannerRRT & handle
           p = ones(1,n_components)*1/n_components;
           gm = gmdistribution(mu, sigma, p);
        end
+       
     end
 end
