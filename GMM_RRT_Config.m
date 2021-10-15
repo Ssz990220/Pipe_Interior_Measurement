@@ -7,7 +7,7 @@ options.col_false_positive_prob = 0.03;
 options.col_true_negative_prob = 0.8;
 % Heuristic Sampling
 options.add_trajectory_based_sample = true;
-options.num_init_sampler_traj = 1000;
+options.num_init_sampler_traj_per_state = 100;
 options.start = start;
 options.target = target;
 options.var = 0.2;

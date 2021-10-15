@@ -7,7 +7,7 @@ if nargin==3
     bhat_dis(i) = 1/8*(mu(pair(i,1),:)-mu(pair(i,2),:))*inv((Sigma(:,:,pair(i,1))+Sigma(:,:,pair(i,2)))/2)*(mu(pair(i,1),:)-mu(pair(i,2),:))'...
         +1/2*log(det((Sigma(:,:,pair(i,1))+Sigma(:,:,pair(i,2)))/2)/sqrt(det(Sigma(:,:,pair(i,1))*Sigma(:,:,pair(i,2)))));
     end
-else
+elseif nargin == 2
     n_cluster = size(mu,1);
     bhat_dis = ones(n_cluster, n_cluster)*inf;
     counter = 1;
@@ -19,4 +19,5 @@ else
         end
     end
 end
+
 end
