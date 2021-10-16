@@ -18,6 +18,7 @@ new_Sigma = Sigma_old;
 list_idx = 1:n_added;
 % Merge Section
 idx_counter = size(old_idx,1) + 1;
+new_samples = old_samples;
 for i = 1:old_gm.NumComponents
     if any(min_idx(merge_flag)==i)
         samples_i = old_samples(old_idx == i,:);
@@ -27,11 +28,11 @@ for i = 1:old_gm.NumComponents
             samples_i = [samples_i;add_samples(added_samples_idx==idx,:)];
             n_new_samples = sum(added_samples_idx==idx);
 %             new_idx(idx_counter:idx_counter + n_new_samples) = ones(n_new_samples,1) * i;
-            new_samples(idx_counter:idx_counter + n_new_samples,:) = ...
+            new_samples(idx_counter+1:idx_counter + n_new_samples,:) = ...
                 add_samples(added_samples_idx==idx,:);
             idx_counter = idx_counter + n_new_samples;
         end
-        gm = fitgmdist(samples_i,1);
+        gm = fitgmdist(cvt_2n_space(samples_i),1);
         new_mu(i,:) = gm.mu;
         new_Sigma(:,:,i) = gm.Sigma;
     end
