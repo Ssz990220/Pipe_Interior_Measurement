@@ -32,7 +32,7 @@ robot.DataFormat = 'row';
 start = [-0.05,-1.25,2,-0.8,0,0];
 target = [1,-1.25,2,-0.8,1,0];
 % show(robot,start,'Parent',ax,"PreservePlot",true,"Collision","on","Visuals","off");
-show(robot,target,'Parent',ax,"PreservePlot",true,"Collision","on","Visuals","off");
+% show(robot,target,'Parent',ax,"PreservePlot",true,"Collision","on","Visuals","off");
 view(60,20);
 end
 
