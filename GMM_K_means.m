@@ -55,13 +55,10 @@ classdef GMM_K_means < handle
             %   Prepare distance matrix to accelerate further calculation
             dis_mat = zeros(obj.n_data,obj.n_data);
             obj.centers = cell(N,1);
-            tic;
             parfor i = 1:obj.n_data
                dis_mat(i,:)=sum((X(i,:)-X).^2,2);         % How to accelerate?
             end
             obj.dis_mat = dis_mat;
-            t = toc;
-            fprintf("Preparing distance matrix took %.4f sec\n",t);
             obj.n_list = zeros(1,obj.max_iter);
             obj.n_iter = 1;
             obj.k_idx = zeros(obj.n_data,obj.N);
@@ -87,7 +84,7 @@ classdef GMM_K_means < handle
                 obj = obj.next_iter();
                 if obj.n_iter < obj.stop_criteria
                     if var(obj.n_list(1:obj.n_iter))==0
-                        obj.gmm_final = obj.gmm_models{-1};
+                        obj.gmm_final = obj.gmm_models{end};
                         break
                     end
                 elseif var(obj.n_list((obj.n_iter-obj.stop_criteria+1):obj.n_iter))==0
@@ -138,30 +135,23 @@ classdef GMM_K_means < handle
         
         function obj = next_iter(obj)
             id = obj.n_iter + 1;
-            tic;
             new_idx = obj.find_xk_plus_1();
-            t = toc;
-%             fprintf('Find new idx took %.6f s in iter %d.\n',[t,id]);
             obj.new_x_init = obj.data(new_idx,:);
             % EM algorithm
             S.mu = [obj.centers{obj.n_iter};obj.new_x_init];
             S.Sigma = cat(3,obj.gmm_models{obj.n_iter}.Sigma,eye(obj.dim_data));
             S.ComponentProportion = ones(1,length(obj.gmm_models{obj.n_iter}.ComponentProportion)+1)...
                 /(length(obj.gmm_models{obj.n_iter}.ComponentProportion)+1);
-            tic;
 %             obj.gmm_models{id} = fitgmdist(obj.data, size(S.mu,1), ...
 %                 'CovarianceType',obj.gmm_CovarianceType,...
 %                 'SharedCovariance',obj.gmm_SharedCovariance, ...
 %                 'RegularizationValue',0.001,...
-%                 'Options',obj.gmm_options,'Start',S);             % TODO
+%                 'Options',obj.gmm_options,'Start',S);             
             obj.gmm_models{id} = fitgmdist(obj.data, size(S.mu,1), ...
                 'CovarianceType',obj.gmm_CovarianceType,...
                 'SharedCovariance',obj.gmm_SharedCovariance, ...
                 'RegularizationValue',0.001,...
                 'Options',obj.gmm_options);             % TODO
-            t = toc;
-%             fprintf('EM for GMM took %.6f s in iter %d.\n',[t,id]);
-            tic;
             if obj.n_list(obj.n_iter) >= obj.start_merge_threshold
                 [merge_flag, cur_centers] = merge_close_clusters(obj,obj.gmm_models{id});
                 if merge_flag
@@ -184,23 +174,19 @@ classdef GMM_K_means < handle
             else
                 cur_centers =[obj.centers{obj.n_iter};obj.new_x_init];
             end
-            t = toc;
-%             fprintf('Merge took %.6f s in iter %d.\n',[t,id]);
-            tic;
             [obj.k_idx(:,id), obj.centers{id}] =...
                 kmeans(obj.data,[],'Options',obj.k_means_options,'Start',...
-                cur_centers,'Display','final');
-            t = toc;
-            fprintf('K-means took %.6f s in iter %d.\n',[t,id]);
+                cur_centers,'Display','off');
             
             % Update obj variables
             obj.n_iter = id;
             obj.n_list(obj.n_iter) = size(cur_centers,1);
+            fprintf('Iteration %d is done, found %d clustters...\n',[id, size(obj.centers{id},1)]);
         end
         
         function [merge_flag, centers] = merge_close_clusters(obj, model)
             % Only merge the closest one
-            dis = bhat_dis(model.mu, model.Sigma)
+            dis = bhat_dis(model.mu, model.Sigma);
             [~, min_idx] = min(dis, [], 2);
             dis_flag = boolean(zeros(size(dis)));
             for i = 1:length(min_idx)
