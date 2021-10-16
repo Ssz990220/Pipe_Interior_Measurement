@@ -2,7 +2,7 @@ function [robot, collision_obj, ax, start, target] = setupBoxEnv()
 %SETUPBOXENV Setup robot environment with a boxy obstacle
 
 % Obstacles
-ground = collisionBox(5,5,0.02);
+ground = collisionBox(2,2,0.02);
 ground.Pose = trvec2tform([0,0,-0.013]);
 box = collisionBox(1,0.1,0.4);
 box.Pose = trvec2tform([0.9,0,0.2]);
@@ -28,5 +28,6 @@ robot.DataFormat = 'row';
 
 start = [0.5,-1.25,2,-0.8,0,0];
 target = [-1,-1.25,2,-0.8,1,0];
+view(110,20)
 end
 
