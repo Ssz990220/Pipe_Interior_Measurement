@@ -4,7 +4,7 @@ function [gm,new_states,new_idx] = update_gm_with_new_samples(states, old_gm, ol
 num_states = size(states,1);
 nearest_gm_idx = zeros(num_states,1);
 for i = 1:num_states
-   dis = mahal(old_gm, states(i,:));
+   dis = mahal(old_gm, cvt_2n_space(states(i,:)));
    [~,nearest_gm_idx(i)] = min(dis);
 end
 mu = old_gm.mu;
@@ -21,6 +21,6 @@ for i = 1:old_gm.NumComponents
 end
 gm = gmdistribution(mu, Sigma);
 new_states = [old_states;states];
-new_idx = [old_idx;nearest_gm_idx];
+new_idx = cluster(gm,cvt_2n_space(new_states));
 end
 
