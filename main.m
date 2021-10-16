@@ -9,13 +9,16 @@ end
 %% Load env & Env
 [robot, collision_obj, ax, start, target] = setupBoxEnv();
 % [robot, collision_obj, ax, start, target] = setupPipeEnv();
+% [robot, collision_obj, ax, start, target] = setupTStructureEnv();
 
 %% Set up planner
 % StateSpace and StateValidator
 ss = UR10StateSpaceGMM;
 sv = UR10StateValidatorGMM(ss, robot, collision_obj);
 %% GMM planner
-options = GMM_RRT_Config(start, target);
+% options = GMM_RRT_T_Config(start, target);
+% options = GMM_RRT_Pipe_Config(start, target);
+options = GMM_RRT_Box_Config(start, target);
 % Setup
 planner = plannerGMMRRT(ss,sv,options);
 tic;
@@ -23,7 +26,9 @@ planner.init();
 t = toc;
 fprintf('Initilization took %.4f sec...\n',t);
 %% GMM Plan
-for i = 1:5
+i=0;
+while 1
+i=i+1;
 tic;
 [pathObj, solnInfo] = planner.plan(start, target);
 t = toc;
@@ -34,12 +39,19 @@ fprintf('Path planning of iter %d took %.4f sec.\n',[i, t]);
 % clc
 % load Temp.mat
 tic;
+fprintf("Updating with %d ambigous states and %d incorrect states...\n",...
+    [size(planner.StateValidator.ambigous_states_pool,1),size(planner.StateValidator.false_col_free_pose,1)]);
 planner.update_GMM_model();
 t = toc;
 fprintf('Updating of iter %d took %.4f sec.\n',[i, t]);
-if solnInfo.IsPathFound
+fprintf('Planning iteration %d is done. PathFoundFlag = %d, ExitFlag = %d, \nKinematic Check %d times, Total Collision Check %d times\n',...
+    [i,solnInfo.IsPathFound,solnInfo.ExitFlag, solnInfo.Kin_check,solnInfo.Total_col_check]);
+if solnInfo.ExitFlag == 1
     q = pathObj.States;
     visualize_traj(robot, q, ax);
+    if solnInfo.IsPathFound
+%         break
+    end
 end
 end
 %% GMM Bi RRT Plan
