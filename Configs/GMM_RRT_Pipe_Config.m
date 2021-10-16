@@ -33,7 +33,7 @@ gmm_rrt_free_options.parallel = false;
 gmm_rrt_free_options.display = true;
 options.gmm_rrt_free_options = gmm_rrt_free_options;
 % Updating Parameter
-options.incorrect_sample_var = 0.01;
-options.n_sample_per_incorrect_state = 30;
+options.incorrect_sample_var = 0.03;
+options.n_sample_per_incorrect_state = 50;
 end
 
