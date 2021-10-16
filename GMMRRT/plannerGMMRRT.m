@@ -50,6 +50,8 @@ classdef plannerGMMRRT < plannerRRT & handle
             obj.col_true_negative_prob = options.col_true_negative_prob;
             obj.add_trajectory_based_sample = options.add_trajectory_based_sample;
             obj.fixed_gmm = options.fixed_gmm;
+            obj.incorrect_sample_var = options.incorrect_sample_var;
+            obj.n_sample_per_incorrect_state = options.n_sample_per_incorrect_state;
             if obj.fixed_gmm
                 obj.fixed_gmm_options = options.fixed_gmm_options;
             end
@@ -67,6 +69,8 @@ classdef plannerGMMRRT < plannerRRT & handle
             obj.StateValidator.kin_check_counter=0;
         end
         function [pathObj, solnInfo] = plan(obj, startState, goalState)
+            obj.StateValidator.gmm_check_counter=0;
+            obj.StateValidator.kin_check_counter=0;
             if coder.target('MATLAB')
                 cleaner = onCleanup(@()obj.cleanUp);
             end
@@ -227,8 +231,7 @@ classdef plannerGMMRRT < plannerRRT & handle
                 obj.gmm_free_model_final = obj.generate_final_gmm(obj.gmm_free_model.gmm_final);
             end
             col_dis = hybrid_dis(obj.col_samples,obj.gmm_col_model_final, obj.gmm_free_model_final);
-            % Free distance is not needed
-%             free_dis = hybrid_dis(obj.free_samples,obj.gmm_col_model_final, obj.gmm_free_model_final);
+            free_dis = hybrid_dis(obj.free_samples,obj.gmm_col_model_final, obj.gmm_free_model_final);
             
             % Find Threshold
 %             free_threshold = norminv(1-obj.col_false_positive_prob,col_dist.mu, col_dist.sigma);
@@ -277,14 +280,16 @@ classdef plannerGMMRRT < plannerRRT & handle
                 legend('Collision','Collision Free','Collision Free Distribution','Collision Distribution','Collision Threshold','Collision Free Threshold');
                 hold off
             end
-            obj.col_samples_gm_idx = cluster(obj.gmm_col_model,obj.col_samples);
-            obj.free_samples_gm_idx = cluster(obj.gmm_free_model, obj.free_samples);
+            obj.col_samples_gm_idx = cluster(obj.gmm_col_model_final,cvt_2n_space(obj.col_samples));
+            obj.free_samples_gm_idx = cluster(obj.gmm_free_model_final, cvt_2n_space(obj.free_samples));
             obj.StateValidator.col_threshold = col_threshold;
             obj.StateValidator.col_free_threshold = free_threshold;
         end
         function obj = update_GMM_model(obj)
-            obj.update_with_ambigous_states(obj);
-            obj.update_with_incorrect_states(obj);
+            obj.update_with_ambigous_states();
+            if size(obj.StateValidator.false_col_free_pose)>0
+                obj.update_with_incorrect_states();
+            end
         end
     end
     methods (Access = {?nav.algs.internal.InternalAccess})
@@ -331,7 +336,7 @@ classdef plannerGMMRRT < plannerRRT & handle
                update_gm_with_new_samples(col_states, obj.gmm_col_model_final, ...
                obj.col_samples, obj.col_samples_gm_idx);
            % Update free model
-           free_states = ambigous_states(ambigous_states_flag,:);
+           free_states = ambigous_states(boolean(ambigous_states_flag),:);
            [obj.gmm_free_model_final, obj.free_samples, obj.free_samples_gm_idx]=...
                update_gm_with_new_samples(free_states,obj.gmm_free_model_final,...
                obj.free_samples, obj.free_samples_gm_idx);
@@ -347,6 +352,7 @@ classdef plannerGMMRRT < plannerRRT & handle
        end
        
        function obj = update_with_incorrect_states(obj)
+           fprintf("Updating with %d incorrect states...\n",size(obj.StateValidator.false_col_free_pose,1));
            incorrect_states = obj.StateValidator.false_col_free_pose;
            num_incorrect_states = size(incorrect_states,1);
            new_samples = obj.StateSpace.sample_around_states(incorrect_states,...
@@ -357,8 +363,7 @@ classdef plannerGMMRRT < plannerRRT & handle
                % Update the col model only, since valid states are so close
                % to collision. Current guess is most of the examplers with
                % be in collision
-               size(new_samples(is_valid(:,i),:,:,i),1)/100
-               new_col_samples = [new_col_samples;new_samples(is_valid,:,i)];
+               new_col_samples = [new_col_samples;new_samples(~is_valid,:,i)];
            end
            local_options = obj.gmm_rrt_col_options;
            local_options.max_iter = size(incorrect_states,1);
@@ -366,11 +371,12 @@ classdef plannerGMMRRT < plannerRRT & handle
            gmm_col_new_model = GMM_K_means(cvt_2n_space(new_col_samples),size(incorrect_states,1),local_options);
            gmm_col_new_model.BUILD_GMM();
            gmm_col_new_model_final = obj.generate_final_gmm(gmm_col_new_model.gmm_final);
-           new_samples_idx = cluster(gmm_col_new_model_final, new_col_samples);
+           new_samples_idx = cluster(gmm_col_new_model_final, cvt_2n_space(new_col_samples));
             [obj.gmm_col_model_final, obj.col_samples, obj.col_samples_gm_idx]=...
                merge_with_new_dist(obj.gmm_col_model_final, gmm_col_new_model_final, obj.col_samples, ...
                obj.col_samples_gm_idx,new_col_samples, new_samples_idx, obj.gmm_rrt_col_options);
-           
+           % Clean up
+           obj.StateValidator.clean_false_col_free_pose();
            % Update Threshold
             col_dis = hybrid_dis(obj.col_samples,obj.gmm_col_model_final, obj.gmm_free_model_final);
             sorted_col_dis = sort(col_dis);

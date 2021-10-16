@@ -72,14 +72,14 @@ classdef UR10StateSpaceGMM < nav.StateSpace & ...
            interp_states = obj.interpolate(state1, state2, [0:(1/8):1 1]);
            states = [];
            for i = 1:size(interp_states,1)
-               states = [states; obj.sampleGaussian(interp_states(i,:),ones(1,dim)*var,n_sample_per_state];
+               states = [states; obj.sampleGaussian(interp_states(i,:),ones(1,dim)*var,n_sample_per_state)];
            end
         end
         
         function new_samples = sample_around_states(obj, states, var, n_sample_per_state)
-            new_samples = zeros(n_sample_per_state,size(state,2),size(state,1));
+            new_samples = zeros(n_sample_per_state,size(states,2),size(states,1));
             for i = 1:size(states,1)
-                new_samples = obj.sampleGaussian(states(i,:),ones(size(state,2),1)*var,n_sample_per_state);
+                new_samples(:,:,i) = obj.sampleGaussian(states(i,:),ones(size(states,2),1)*var,n_sample_per_state);
            end
         end
         

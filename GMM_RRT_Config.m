@@ -1,6 +1,6 @@
 function options = GMM_RRT_Config(start, target)
 %GMM_RRT_CONFIG The options for learning GMM model
-options.num_init_sampler = 1000;
+options.num_init_sampler = 2000;
 options.display_init_result = true;
 options.randSampleProb = 0.5;
 options.col_false_positive_prob = 0.03;
@@ -10,7 +10,7 @@ options.add_trajectory_based_sample = true;
 options.num_init_sampler_traj_per_state = 100;
 options.start = start;
 options.target = target;
-options.var = 0.2;
+options.var = 0.3;
 % Fixed GMM
 options.fixed_gmm = false;
 fixed_gmm_options.num_component = 7;
@@ -31,5 +31,8 @@ gmm_rrt_free_options.stop_criteria = 5;
 gmm_rrt_free_options.parallel = false;
 gmm_rrt_free_options.display = true;
 options.gmm_rrt_free_options = gmm_rrt_free_options;
+% Updating Parameter
+options.incorrect_sample_var = 0.01;
+options.n_sample_per_incorrect_state = 30;
 end
 
