@@ -59,9 +59,16 @@ classdef plannerGMMRRT < plannerRRT & handle
             end
             
             if obj.add_trajectory_based_sample
-                obj.init_samples = [obj.StateSpace.sample_around_traj(options.start,...
+                if obj.num_init_sampler == 0
+                % 0 will not work for sampleUniform
+                    obj.init_samples = obj.StateSpace.sample_around_traj(options.start,...
+                    options.target, options.var, options.num_init_sampler_traj_per_state...
+                    );
+                else
+                    obj.init_samples = [obj.StateSpace.sample_around_traj(options.start,...
                     options.target, options.var, options.num_init_sampler_traj_per_state...
                     );obj.StateSpace.sampleUniform(obj.num_init_sampler)];
+                end
             else
                 obj.init_samples = obj.StateSpace.sampleUniform(obj.num_init_sampler);
             end
@@ -281,7 +288,7 @@ classdef plannerGMMRRT < plannerRRT & handle
             if size(obj.StateValidator.false_col_free_pose)>0
                 obj.update_with_incorrect_states();
             end
-            obj.update_threshold();
+%             obj.update_threshold();
         end
     end
     methods (Access = {?nav.algs.internal.InternalAccess})
@@ -334,13 +341,6 @@ classdef plannerGMMRRT < plannerRRT & handle
                obj.free_samples, obj.free_samples_gm_idx);
            % Clean up
            obj.StateValidator.clean_ambigous_pose_pool(); 
-           % Update Threshold
-            col_dis = hybrid_dis(obj.col_samples,obj.gmm_col_model_final, obj.gmm_free_model_final);
-            sorted_col_dis = sort(col_dis);
-            free_threshold = sorted_col_dis(round(size(col_dis,2)*(1-obj.col_false_positive_prob)));
-            col_threshold = sorted_col_dis(round(size(col_dis,2)*obj.col_true_negative_prob));
-            obj.StateValidator.col_threshold = col_threshold;
-            obj.StateValidator.col_free_threshold = free_threshold;
        end
        
        function obj = update_with_incorrect_states(obj)
