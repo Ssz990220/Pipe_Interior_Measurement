@@ -75,7 +75,10 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
             isValid = ~inCollision;
         end
         
-        function isValid = isStateValid_GMM(obj, state, GMM_col_model, GMM_free_model)
+        function isValid = isStateValid_GMM(obj, state, GMM_col_model, GMM_free_model,traj_check)
+            if nargin==4
+                traj_check=false;
+            end
             state_2n = cvt_2n_space(state);
             dis_col = min(mahal(GMM_col_model,state_2n),[],2);
             dis_free = min(mahal(GMM_free_model,state_2n),[],2);
@@ -89,7 +92,9 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
                         isValid(i) = true;
                     else
                         isValid(i) = obj.isStateValid(state(i,:));
+                        if ~traj_check
                         obj.add_ambigous_pose(state(i,:), isValid(i));
+                        end
                     end
                     obj.gmm_check_counter = obj.gmm_check_counter + 1;
                 end
@@ -141,7 +146,7 @@ classdef UR10StateValidatorGMM < nav.StateValidator & handle
                
                 interpSt = interpStates(i,:);
                 
-                if ~obj.isStateValid_GMM(interpSt, GMM_col_model, GMM_free_model)
+                if ~obj.isStateValid_GMM(interpSt, GMM_col_model, GMM_free_model,1)
                     isValid = false; 
                     break;
                 end
