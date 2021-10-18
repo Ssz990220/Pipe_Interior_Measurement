@@ -2,10 +2,11 @@ function options = GMM_RRT_Box_Config(start, target)
 %GMM_RRT_CONFIG The options for learning GMM model
 options.num_init_sampler =1000;
 options.display_init_result = false;
-options.randSampleProb = 0.5;
+options.randSampleProb = 0.3;
 options.col_false_positive_prob = 0.03;
 options.col_true_negative_prob = 0.8;
 options.free_true_positive_prob = 0.8;
+options.MaxConnectionDistance = 0.06;
 % Heuristic Sampling
 options.add_trajectory_based_sample = true;
 % ↑ Sample around start and target states to put start and target in collision free zones

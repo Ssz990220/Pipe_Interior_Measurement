@@ -12,6 +12,7 @@ pipes = pipe_loader('./assets/Pipe/pipe_mat',0.001*eye(4)*trvec2tform([250,500,0
 
 figHandle = figure;         % Figure Handle
 hold all;
+axis equal
 for i = 1:size(pipes,1)
     collision_obj{i} = collisionMesh(pipes{i});
 end
@@ -23,7 +24,6 @@ ax = gca;
 for i = 1:size(pipes,1)
     show(collision_obj{i},"Parent", ax);
 end
-axis equal
 % show(box,"parent",ax);
 %% Load robot
 robot = importrobot('universalUR10.urdf',"MeshPath",["../asset/ur_description/ur10/collision","../asset/ur_description/ur10/visual"]);

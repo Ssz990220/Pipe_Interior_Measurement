@@ -25,7 +25,7 @@ robot = importrobot('universalUR10.urdf',"MeshPath",["../asset/ur_description/ur
 robot.DataFormat = 'row';
 
 start = [-1,-1.25,2,-0.8,0,0];
-target = [0.4,-0.2,0.2,-0.8,1,0];
+target = [0,-1.2,1,-2,-2,0];
 show(robot,start,'Parent',ax,"PreservePlot",true,"Collision","on","Visuals","off");
 show(robot,target,'Parent',ax,"PreservePlot",true,"Collision","on","Visuals","off");
 view(120,40);
