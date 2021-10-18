@@ -44,6 +44,7 @@ classdef plannerGMMRRT < plannerRRT & handle
             obj.gmm_rrt_col_options = options.gmm_rrt_col_options;
             obj.gmm_rrt_free_options = options.gmm_rrt_free_options;
             obj.randSampleProb = options.randSampleProb;
+            obj.MaxConnectionDistance = options.MaxConnectionDistance;
             obj.GoalReachedFcn = @GMMGoalReachedFunction;
             obj.is_init = false;
             obj.display_init_result = options.display_init_result;
@@ -242,19 +243,6 @@ classdef plannerGMMRRT < plannerRRT & handle
             [col_dis, free_dis, col_threshold, free_threshold] = obj.update_threshold();
             % Display result
             if obj.display_init_result
-%                 true_positive_prob = normcdf(free_threshold, free_dist.mu, free_dist.sigma,'upper');
-%                 false_positive_prob = obj.col_false_positive_prob;
-%                 true_negative_prob = obj.col_true_negative_prob;
-%                 false_negative_prob = normcdf(col_threshold, free_dist.mu, free_dist.sigma);
-                true_positive_prob = size(free_dis(free_dis>free_threshold),2)/size(free_dis,2);
-                false_positive_prob = size(col_dis(col_dis>free_threshold),2)/size(col_dis,2);
-                false_negative_prob = size(free_dis(free_dis<col_threshold),2)/size(free_dis,2);
-                true_negative_prob = size(col_dis(col_dis<col_threshold),2)/size(col_dis,2);
-                
-                fprintf('\tPos\tNeg\nTrue%d%% %d%%\nFalse %d%% %d%% \n',...
-                    [round(true_positive_prob*100),round(true_negative_prob*100),...
-                    round(false_positive_prob*100),round(false_negative_prob*100)])
-                
                 % Histogram
                 figure
                 h1 = histogram(col_dis);
@@ -275,9 +263,10 @@ classdef plannerGMMRRT < plannerRRT & handle
                 plot(x,normpdf(x,free_dist.mu, free_dist.sigma),'Color','r');
                 plot(x,normpdf(x,col_dist.mu, col_dist.sigma),'Color','b');
                 % Threshold Plot
-                plot(ones(100,1)*col_threshold,(1:100)/1000,'--','Color','b');
-                plot(ones(100,1)*free_threshold,(1:100)/1000,'--','Color','r');
-                legend('Collision','Collision Free','Collision Free Distribution','Collision Distribution','Collision Threshold','Collision Free Threshold');
+                plot(ones(100,1)*col_threshold,(1:100)/1000,'--','Color','b','LineWidth',2);
+                plot(ones(100,1)*free_threshold,(1:100)/1000,'--','Color','r','LineWidth',2);
+                xlabel('Hybrid Distance','FontSize',16);
+                legend('Collision','Collision Free','Collision Free Distribution','Collision Distribution','Collision Threshold','Collision Free Threshold','FontSize',12);
                 hold off
             end
             obj.col_samples_gm_idx = cluster(obj.gmm_col_model_final,cvt_2n_space(obj.col_samples));
@@ -288,7 +277,7 @@ classdef plannerGMMRRT < plannerRRT & handle
             if size(obj.StateValidator.false_col_free_pose)>0
                 obj.update_with_incorrect_states();
             end
-%             obj.update_threshold();
+            obj.update_threshold();
         end
     end
     methods (Access = {?nav.algs.internal.InternalAccess})
@@ -331,14 +320,22 @@ classdef plannerGMMRRT < plannerRRT & handle
            ambigous_states_flag = obj.StateValidator.ambigous_states_flag_pool;
            % Update collision model
            col_states = ambigous_states(~ambigous_states_flag,:);
+           if size(col_states,1)>size(obj.col_samples,1)*0.2
+               obj.large_sample_update(10, col_states,1);
+           else
            [obj.gmm_col_model_final, obj.col_samples, obj.col_samples_gm_idx]=...
                update_gm_with_new_samples(col_states, obj.gmm_col_model_final, ...
                obj.col_samples, obj.col_samples_gm_idx);
+           end
            % Update free model
            free_states = ambigous_states(boolean(ambigous_states_flag),:);
+           if size(free_states,1)>size(obj.free_samples,1)*0.2
+               obj.large_sample_update(10, free_states,0);
+           else
            [obj.gmm_free_model_final, obj.free_samples, obj.free_samples_gm_idx]=...
                update_gm_with_new_samples(free_states,obj.gmm_free_model_final,...
                obj.free_samples, obj.free_samples_gm_idx);
+           end
            % Clean up
            obj.StateValidator.clean_ambigous_pose_pool(); 
        end
@@ -363,16 +360,7 @@ classdef plannerGMMRRT < plannerRRT & handle
                % be in collision
                new_col_samples = [new_col_samples;new_samples(~is_valid,:,i)];
            end
-           local_options = obj.gmm_rrt_col_options;
-           local_options.max_iter = size(incorrect_states,1);
-           local_options.start_merge_threshold = 1;
-           gmm_col_new_model = GMM_K_means(cvt_2n_space(new_col_samples),size(incorrect_states,1),local_options);
-           gmm_col_new_model.BUILD_GMM();
-           gmm_col_new_model_final = obj.generate_final_gmm(gmm_col_new_model.gmm_final);
-           new_samples_idx = cluster(gmm_col_new_model_final, cvt_2n_space(new_col_samples));
-            [obj.gmm_col_model_final, obj.col_samples, obj.col_samples_gm_idx]=...
-               merge_with_new_dist(obj.gmm_col_model_final, gmm_col_new_model_final, obj.col_samples, ...
-               obj.col_samples_gm_idx,new_col_samples, new_samples_idx, obj.gmm_rrt_col_options);
+           obj.large_sample_update(size(incorrect_states,1),new_col_samples,1);
            % Clean up
            obj.StateValidator.clean_false_col_free_pose();
        end
@@ -386,10 +374,43 @@ classdef plannerGMMRRT < plannerRRT & handle
 %             free_threshold = sorted_free_dis(round(size(free_dis,2)*(1-obj.free_true_positive_prob)));
             free_threshold = sorted_col_dis(round(size(col_dis, 2)*(1-obj.col_false_positive_prob)));
             col_threshold = sorted_col_dis(round(size(col_dis,2)*obj.col_true_negative_prob));
+            true_positive_prob = size(free_dis(free_dis>free_threshold),2)/size(free_dis,2);
+            false_positive_prob = size(col_dis(col_dis>free_threshold),2)/size(col_dis,2);
+            false_negative_prob = size(free_dis(free_dis<col_threshold),2)/size(free_dis,2);
+            true_negative_prob = size(col_dis(col_dis<col_threshold),2)/size(col_dis,2);
+
+            fprintf('\tPos\tNeg\nTrue%d%% %d%%\nFalse %d%% %d%% \n',...
+                [round(true_positive_prob*100),round(true_negative_prob*100),...
+                round(false_positive_prob*100),round(false_negative_prob*100)])
             obj.StateValidator.col_threshold = col_threshold;
             obj.StateValidator.col_free_threshold = free_threshold;    
        end
-       
+        
+       function large_sample_update(obj,max_iter, new_samples,update_col)
+           if update_col
+               local_options = obj.gmm_rrt_col_options;
+               local_options.max_iter = max_iter;
+               local_options.start_merge_threshold = 1;
+               gmm_col_new_model = GMM_K_means(cvt_2n_space(new_samples),max_iter,local_options);
+               gmm_col_new_model.BUILD_GMM();
+               gmm_col_new_model_final = obj.generate_final_gmm(gmm_col_new_model.gmm_final);
+               new_samples_idx = cluster(gmm_col_new_model_final, cvt_2n_space(new_samples));
+                [obj.gmm_col_model_final, obj.col_samples, obj.col_samples_gm_idx]=...
+                   merge_with_new_dist(obj.gmm_col_model_final, gmm_col_new_model_final, obj.col_samples, ...
+                   obj.col_samples_gm_idx,new_samples, new_samples_idx, obj.gmm_rrt_col_options);
+           else
+               local_options = obj.gmm_rrt_free_options;
+               local_options.max_iter = max_iter;
+               local_options.start_merge_threshold = 1;
+               gmm_free_new_model = GMM_K_means(cvt_2n_space(new_samples),max_iter,local_options);
+               gmm_free_new_model.BUILD_GMM();
+               gmm_free_new_model_final = obj.generate_final_gmm(gmm_free_new_model.gmm_final);
+               new_samples_idx = cluster(gmm_free_new_model_final, cvt_2n_space(new_samples));
+                [obj.gmm_free_model_final, obj.free_samples, obj.free_samples_gm_idx]=...
+                   merge_with_new_dist(obj.gmm_free_model_final, gmm_free_new_model_final, obj.free_samples, ...
+                   obj.free_samples_gm_idx, new_samples, new_samples_idx, obj.gmm_rrt_free_options);
+           end
+       end
        function gm = generate_final_gmm(obj, gm_final)
           mu = gm_final.mu;
           sigma = gm_final.Sigma;
