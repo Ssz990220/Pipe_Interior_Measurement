@@ -7,31 +7,38 @@ if isempty(gcp('nocreate'))
     parpool
 end
 %% Load env & Env
-[robot, collision_obj, ax, start, target] = setupBoxEnv();
+% [robot, collision_obj, ax, start, target] = setupBoxEnv();
 % [robot, collision_obj, ax, start, target] = setupPipeEnv();
-% [robot, collision_obj, ax, start, target] = setupTStructureEnv();
+[robot, collision_obj, ax, start, target] = setupTStructureEnv();
 
 %% Set up planner
 % StateSpace and StateValidator
 ss = UR10StateSpaceGMM;
 sv = UR10StateValidatorGMM(ss, robot, collision_obj);
 %% GMM planner
-% options = GMM_RRT_T_Config(start, target);
+options = GMM_RRT_T_Config(start, target);
 % options = GMM_RRT_Pipe_Config(start, target);
-options = GMM_RRT_Box_Config(start, target);
+% options = GMM_RRT_Box_Config(start, target);
 % Setup
 planner = plannerGMMRRT(ss,sv,options);
+%% Time Saver
 tic;
 planner.init();
+planner.GoalBias=0.2;
 t = toc;
 fprintf('Initilization took %.4f sec...\n',t);
 %% GMM Plan
 i=0;
-while 1
-i=i+1;
+time_GMM_RRT_plan = [];
+time_GMM_RRT_update = [];
+path_found = [];
+kin_check=[];
+Total_col_check=[];
+for i = 1:10
 tic;
 [pathObj, solnInfo] = planner.plan(start, target);
 t = toc;
+time_GMM_RRT_plan = [time_GMM_RRT_plan,t];
 fprintf('Path planning of iter %d took %.4f sec.\n',[i, t]);
 % save Temp.mat
 % %% Temp Test
@@ -46,9 +53,12 @@ t = toc;
 fprintf('Updating of iter %d took %.4f sec.\n',[i, t]);
 fprintf('Planning iteration %d is done. PathFoundFlag = %d, ExitFlag = %d, \nKinematic Check %d times, Total Collision Check %d times\n',...
     [i,solnInfo.IsPathFound,solnInfo.ExitFlag, solnInfo.Kin_check,solnInfo.Total_col_check]);
+path_found = [path_found,solnInfo.IsPathFound];
+kin_check = [kin_check,solnInfo.Kin_check];
+Total_col_check = [Total_col_check,solnInfo.Total_col_check];
 if solnInfo.ExitFlag == 1
     q = pathObj.States;
-    visualize_traj(robot, q, ax);
+    visualize_traj(robot, q, ax, 1, i);
     if solnInfo.IsPathFound
 %         break
     end
@@ -76,12 +86,25 @@ toc
 q = pathObj.States;
 visualize_traj(robot, q, ax);
 %% BiRRT Plan
+time_BiRRT_plan = [];
+path_length_BiRRT = [];
+% time_BiRRT_update = [];
+% path_found_BiRRT = [];
+kin_check_BiRRT=[];
+
+planner = plannerBiRRT(ss,sv);
+planner.MaxConnectionDistance = 0.08;
+for i = 1:8
 tic;
 sv.clean_counter();
-planner = plannerBiRRT(ss,sv);
-[pathObj, solnInfo] = planner.plan(start,target)
-toc
-
-%% Visualize 
+[pathObj, solnInfo] = planner.plan(start,target);
+t = toc
+time_BiRRT_plan = [time_BiRRT_plan,t];
+% path_found_BiRRT = [path_found_BiRRT,solnInfo.IsPathFound];
+kin_check_BiRRT = [kin_check_BiRRT,planner.StateValidator.kin_check_counter];
 q = pathObj.States;
-visualize_traj(robot, q, ax);
+path_length_BiRRT = [path_length_BiRRT,size(q,1)];
+% Visualize 
+q = pathObj.States; 
+visualize_traj(robot, q, ax,1,i);
+end

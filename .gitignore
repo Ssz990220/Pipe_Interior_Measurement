@@ -1,3 +1,9 @@
 *.asv
 *.SLDPRT
 *.mat
+/Experiment
+*.jpg
+*.png
+*.fig
+*.gif
+*.xlsx
