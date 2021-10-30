@@ -58,6 +58,7 @@ kin_check = [kin_check,solnInfo.Kin_check];
 Total_col_check = [Total_col_check,solnInfo.Total_col_check];
 if solnInfo.ExitFlag == 1
     q = pathObj.States;
+    shortPath = shorten(planner,q,100);
     visualize_traj(robot, q, ax, 1, i);
     if solnInfo.IsPathFound
 %         break
@@ -106,5 +107,5 @@ q = pathObj.States;
 path_length_BiRRT = [path_length_BiRRT,size(q,1)];
 % Visualize 
 q = pathObj.States; 
-visualize_traj(robot, q, ax,1,i);
+visualize_traj(robot, q, ax,1,i);   
 end
