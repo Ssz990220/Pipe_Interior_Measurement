@@ -109,3 +109,6 @@ path_length_BiRRT = [path_length_BiRRT,size(q,1)];
 q = pathObj.States; 
 visualize_traj(robot, q, ax,1,i);   
 end
+%% Built-in BiRRT
+plannerBiRRT_in = manipulatorRRT(robot, collision_obj);
+path = plan(plannerBiRRT_in, start, target);
