@@ -5,7 +5,7 @@ if nargin == 4
 end
 % Loop through the other positions
 for i = 1:length(q)
-    show(robot,q(i,:),"Parent",ax,"PreservePlot",false);
+    show(robot,q(i,:),"Parent",ax,"PreservePlot",false,"Collisions","on","Visuals","off");
     if save
         if i == length(q)
             saveas(ax,strcat('./Experiment/',string(prefix),sprintf('_%d_done.jpg',i)));
