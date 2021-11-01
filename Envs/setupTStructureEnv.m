@@ -28,6 +28,9 @@ start = [-1,-1.25,2,-0.8,0,0];
 target = [0,-1.2,1,-2,-2,0];
 show(robot,start,'Parent',ax,"PreservePlot",true,"Collision","on","Visuals","off");
 show(robot,target,'Parent',ax,"PreservePlot",true,"Collision","on","Visuals","off");
-view(120,40);
+view(10,15);
+xlim([-0.2,1.5])
+ylim([-1,1])
+zlim([0,1])
 end
 

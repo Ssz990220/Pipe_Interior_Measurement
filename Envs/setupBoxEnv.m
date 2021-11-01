@@ -21,6 +21,9 @@ show(ground)
 ax = gca;
 hold all;
 axis equal
+xlim([-0.2,1.5])
+ylim([-1,1])
+zlim([0,1])
 show(box,"parent",ax);
 %% Load robot
 robot = importrobot('universalUR10.urdf',"MeshPath",["../asset/ur_description/ur10/collision","../asset/ur_description/ur10/visual"]);
